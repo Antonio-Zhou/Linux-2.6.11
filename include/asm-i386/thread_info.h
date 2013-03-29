@@ -28,9 +28,21 @@
 struct thread_info {
 	struct task_struct	*task;		/* main task structure */
 	struct exec_domain	*exec_domain;	/* execution domain */
+	/*存放TIF_NEED_RESCHED标志,如果必须调用调度程序,则设置该标志*/
 	unsigned long		flags;		/* low level flags */
 	unsigned long		status;		/* thread-synchronous flags */
+	/*可运行进程所在运行队列的CPU逻辑号*/
 	__u32			cpu;		/* current CPU */
+	/*
+	*	用来跟踪内核抢占和内核控制路径的嵌套
+	*	位			描述
+	*	0-7			抢占计数器(max value == 255)记录显式禁用本地CPU内核抢占的次数==0表示允许内核抢占
+	*	8-15		软中断计数器(max value == 255)表示可延迟函数被禁用的程度,==0表示可延迟函数处于激活状态
+	*					利用该计数器,可在本地CPU上激活或禁止可延迟函数
+	*	16-27		硬中断计数器(max value == 4096)表示在本地CPU上中断处理程序的嵌套数
+	*										irq_entry() 递增它的值irq_exit()递减它的值
+	*	28			PREEMPT_ACTIVE标志
+	*/
 	__s32			preempt_count; /* 0 => preemptable, <0 => BUG */
 
 
@@ -85,6 +97,9 @@ struct thread_info {
 
 
 /* how to get the thread information struct from C */
+/*
+*	获取与内核栈(地址在esp中)相连的thread_info描述符的地址
+*/
 static inline struct thread_info *current_thread_info(void)
 {
 	struct thread_info *ti;
@@ -133,15 +148,15 @@ register unsigned long current_stack_pointer asm("esp") __attribute_used__;
  * - pending work-to-be-done flags are in LSW
  * - other flags in MSW
  */
-#define TIF_SYSCALL_TRACE	0	/* syscall trace active */
+#define TIF_SYSCALL_TRACE	0	/* syscall trace active */		/*正在跟踪系统调用*/
 #define TIF_NOTIFY_RESUME	1	/* resumption notification requested */
-#define TIF_SIGPENDING		2	/* signal pending */
-#define TIF_NEED_RESCHED	3	/* rescheduling necessary */
-#define TIF_SINGLESTEP		4	/* restore singlestep on return to user mode */
-#define TIF_IRET		5	/* return with iret */
-#define TIF_SYSCALL_AUDIT	7	/* syscall auditing active */
-#define TIF_POLLING_NRFLAG	16	/* true if poll_idle() is polling TIF_NEED_RESCHED */
-#define TIF_MEMDIE		17
+#define TIF_SIGPENDING		2	/* signal pending */			/*进程有挂起信号*/
+#define TIF_NEED_RESCHED	3	/* rescheduling necessary */	/*必须执行调度程序*/	
+#define TIF_SINGLESTEP		4	/* restore singlestep on return to user mode */	/*临返回用户态前恢复单步执行*/
+#define TIF_IRET		5	/* return with iret */					/*通过iret而不是sysexit从从系统调用强行返回*/
+#define TIF_SYSCALL_AUDIT	7	/* syscall auditing active */		/*系统调用正在被审计*/
+#define TIF_POLLING_NRFLAG	16	/* true if poll_idle() is polling TIF_NEED_RESCHED */	/*空闲进程正在轮询TIF_NEED_RESCHED标志*/
+#define TIF_MEMDIE		17									/*正在撤销进程以回收内存*/
 
 #define _TIF_SYSCALL_TRACE	(1<<TIF_SYSCALL_TRACE)
 #define _TIF_NOTIFY_RESUME	(1<<TIF_NOTIFY_RESUME)

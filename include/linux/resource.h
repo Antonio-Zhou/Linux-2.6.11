@@ -45,9 +45,9 @@ struct rlimit {
 #define	PRIO_MIN	(-20)
 #define	PRIO_MAX	20
 
-#define	PRIO_PROCESS	0
-#define	PRIO_PGRP	1
-#define	PRIO_USER	2
+#define	PRIO_PROCESS	0		/*根据进程ID选择进程*/
+#define	PRIO_PGRP	1			/*根据组ID选择进程*/
+#define	PRIO_USER	2			/*根据用户ID选择进程*/
 
 /*
  * Limit the stack by to some sane default: root can always

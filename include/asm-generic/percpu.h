@@ -8,11 +8,14 @@
 extern unsigned long __per_cpu_offset[NR_CPUS];
 
 /* Separate out the type, so (int[3], foo) works. */
+/*静态分配一个每CPU数组,数组名为name.结构类型为type	*/
 #define DEFINE_PER_CPU(type, name) \
     __attribute__((__section__(".data.percpu"))) __typeof__(type) per_cpu__##name
 
 /* var is in discarded region: offset to particular copy we want */
+/*为CPU选择一个每CPU数组元素,CPU由参数cpu指定,数组名称为name*/
 #define per_cpu(var, cpu) (*RELOC_HIDE(&per_cpu__##var, __per_cpu_offset[cpu]))
+/*选择每CPU数组name的本地CPU元素*/
 #define __get_cpu_var(var) per_cpu(var, smp_processor_id())
 
 /* A macro to avoid #include hell... */

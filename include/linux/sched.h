@@ -127,8 +127,19 @@ extern unsigned long nr_iowait(void);
 /*
  * Scheduling policies
  */
+ /*普通的分时进程*/
 #define SCHED_NORMAL		0
+/*
+*	先进先出的实时进程
+*	当调度程序把CPU分配给进程的时候,它把该进程描述符保留在运行队列链表的当前位置.
+*	如果没有其他可运行的更高优先级实时进程,进程就继续使用CPU,想用多久是多久
+*	即使还有其他具有相同优先级的实时进程处于可运行状态.
+*/
 #define SCHED_FIFO		1
+/*
+*	时间片轮转的实时进程.当调度程序把CPU分配给进程的时候,它把该进程的描述符放在运行队列链表的尾部
+*	这种策略保证对所有具有相同优先级的SCHED_RR实时进程公平的分配CPU时间
+*/
 #define SCHED_RR		2
 
 struct sched_param {
@@ -408,7 +419,9 @@ extern struct file_operations proc_schedstat_operations;
 
 enum idle_type
 {
+	/*CPU当前空闲,即current是swapper进程*/
 	SCHED_IDLE,
+	/*CPU当前不空闲,即current不是swapper进程*/
 	NOT_IDLE,
 	NEWLY_IDLE,
 	MAX_IDLE_TYPES
@@ -428,6 +441,7 @@ enum idle_type
 #define SD_WAKE_BALANCE		32	/* Perform balancing at task wakeup */
 #define SD_SHARE_CPUPOWER	64	/* Domain members share cpu power */
 
+/*调度域中的每个组*/
 struct sched_group {
 	struct sched_group *next;	/* Must be a circular list */
 	cpumask_t cpumask;
@@ -439,9 +453,14 @@ struct sched_group {
 	unsigned long cpu_power;
 };
 
+/*
+*	调度域
+*/
 struct sched_domain {
 	/* These fields must be setup */
+	/*指向父调度域的描述符(如果有的话)*/
 	struct sched_domain *parent;	/* top domain must be null terminated */
+	/*指向组描述符链表中的第一个元素*/
 	struct sched_group *groups;	/* the balancing groups of the domain */
 	cpumask_t span;			/* span of all CPUs in this domain */
 	unsigned long min_interval;	/* Minimum balance interval ms */
@@ -526,6 +545,7 @@ struct audit_context;		/* See audit.c */
 struct mempolicy;
 
 struct task_struct {
+	/*进程的当前状态*/
 	volatile long state;	/* -1 unrunnable, 0 runnable, >0 stopped */
 	struct thread_info *thread_info;
 	atomic_t usage;
@@ -534,16 +554,39 @@ struct task_struct {
 
 	int lock_depth;		/* Lock depth */
 
+	/*
+	*		prio---进程的动态优先级
+	*		static_prio---进程的静态优先级
+	*/
 	int prio, static_prio;
+	/*指向进程所属的运行队列链表中的下一个和前一个元素*/
 	struct list_head run_list;
+	/*指向包含进程的运行队列的集合prio_array_t*/
 	prio_array_t *array;
 
+	/*进程的平均睡眠时间*/
 	unsigned long sleep_avg;
+	/*
+	*	timestamp---进程最近插入运行队列的时间,或涉及本进程的最近一次进程切换的时间
+	*	last_ran---最近一次替换本进程的进程的切换时间
+	*/
 	unsigned long long timestamp, last_ran;
+	/*
+	*	进程被唤醒时所使用的条件代码
+	*	0---TASK_RUNNING
+	*	1---TASK_INTERRUPTIBLE或TASK_STOPPED状态,而且正在被系统调用服务例程或内核线程唤醒
+	*	2---TASK_INTERRUPTIBLE或TASK_STOPPED状态,而且正在被中断处理程序或可延迟函数唤醒
+	*	-1---进程处于TASK_UNINTERRUPTIBLE状态而且正在被唤醒
+	*/
 	int activated;
-
+	/*进程的调度类型(SCHED_NORMAL,SCHED_RR,SCHED_FIFO)*/
 	unsigned long policy;
+	/*能执行进程的CPU的位掩码*/
 	cpumask_t cpus_allowed;
+	/*
+	*	time_slice---在进程的时间片中还剩余的时钟节拍数
+	*	first_time_slice---如果进程肯定不会用完其时间片,就把该标志设为1
+	*/
 	unsigned int time_slice, first_time_slice;
 
 #ifdef CONFIG_SCHEDSTATS
@@ -592,7 +635,13 @@ struct task_struct {
 	int __user *set_child_tid;		/* CLONE_CHILD_SETTID */
 	int __user *clear_child_tid;		/* CLONE_CHILD_CLEARTID */
 
+	/*进程的实时优先级*/
 	unsigned long rt_priority;
+	/*
+	*	下面三组数据:
+	*	第一个字段: 两个信号之间以节拍为单位的间隔
+	*	第二个字段: 定时器当前的值
+	*/
 	unsigned long it_real_value, it_real_incr;
 	cputime_t it_virt_value, it_virt_incr;
 	cputime_t it_prof_value, it_prof_incr;
@@ -708,6 +757,9 @@ static inline int pid_alive(struct task_struct *p)
 extern void free_task(struct task_struct *tsk);
 extern void __put_task_struct(struct task_struct *tsk);
 #define get_task_struct(tsk) do { atomic_inc(&(tsk)->usage); } while(0)
+/*
+*	释放进程描述符引用计数器,并撤销所有其余对该进程的引用
+*/
 #define put_task_struct(tsk) \
 do { if (atomic_dec_and_test(&(tsk)->usage)) __put_task_struct(tsk); } while(0)
 
@@ -803,6 +855,14 @@ void yield(void);
  */
 extern struct exec_domain	default_exec_domain;
 
+/*
+*	每个进程的thread_info描述符与thread_union结构中的内核栈紧邻.
+*	如thread_union=8 KB,当前进程的内核栈用于所有类型的内核控制路径:异常,中断,可延迟的函数
+*	thread_info=4 KB, 使用三种类型的内核栈:
+*		异常栈:用于处理异常(包括系统调用),这个栈包含在每个进程的thread_union中,因此对系统中的每个进程,内核使用不同的异常栈.
+*		硬中断请求栈:用于处理中断.系统中的每个CPU都有一个硬中断请求栈,而且每个栈占用一个单独的页框.
+*		软中断请求栈:用于处理可延迟的函数(软中断或tasklet).系统中每个CPU都有一个软中断请求栈,而且每个栈占用一个单独的页框
+*/
 union thread_union {
 	struct thread_info thread_info;
 	unsigned long stack[THREAD_SIZE/sizeof(long)];
@@ -1082,6 +1142,9 @@ static inline void set_tsk_need_resched(struct task_struct *tsk)
 	set_tsk_thread_flag(tsk,TIF_NEED_RESCHED);
 }
 
+/*
+*	清除prev的TIF_NEED_RESCHED标志
+*/
 static inline void clear_tsk_need_resched(struct task_struct *tsk)
 {
 	clear_tsk_thread_flag(tsk,TIF_NEED_RESCHED);

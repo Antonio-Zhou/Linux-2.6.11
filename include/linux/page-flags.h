@@ -51,29 +51,49 @@
  * locked- and dirty-page accounting.  The top eight bits of page->flags are
  * used for page->zone, so putting flag bits there doesn't work.
  */
+
+/*页被锁定。例如，在磁盘I/O操作中涉及的页*/
 #define PG_locked	 	 0	/* Page is locked. Don't touch. */
+/*在传输页时发生I/O错误*/
 #define PG_error		 1
+/*刚刚访问过的页*/
 #define PG_referenced		 2
+/*在完成读操作后置位，除非发生磁盘I/O错误*/
 #define PG_uptodate		 3
 
+/*页已经被修改*/
 #define PG_dirty	 	 4
+/*页在活动或非活动页链表中*/
 #define PG_lru			 5
+/*页在活动页链表中*/
 #define PG_active		 6
+/*包含在slab中的页框*/
 #define PG_slab			 7	/* slab debug (Suparna wants this) */
 
+/*页框属于ZONE_HIGHMEM管理区*/
 #define PG_highmem		 8
+/*在一些文件系统(Ext3和Ext2)中使用的标志*/
 #define PG_checked		 9	/* kill me in 2.5.<early>. */
 #define PG_arch_1		10
+/*页框留给内核代码或没有使用*/
 #define PG_reserved		11
 
+/*页描述符的private字段存放了有意义的数据*/
 #define PG_private		12	/* Has something at ->private */
+/*正在使用writepage方法将页写到磁盘上*/
 #define PG_writeback		13	/* Page is under writeback */
+/*系统挂起/唤醒时使用*/
 #define PG_nosave		14	/* Used for system suspend/resume */
+/*通过扩展分页机制处理页框*/
 #define PG_compound		15	/* Part of a compound page */
 
+/*页属于对换高速缓存*/
 #define PG_swapcache		16	/* Swap page: swp_entry_t in private */
+/*页框中的所有数据对应于磁盘上分配的块*/
 #define PG_mappedtodisk		17	/* Has blocks allocated on-disk */
+/*为回收内存对页已经做了写入磁盘的标记*/
 #define PG_reclaim		18	/* To be reclaimed asap */
+/*系统挂起/恢复时使用*/
 #define PG_nosave_free		19	/* Free, should not be written */
 
 

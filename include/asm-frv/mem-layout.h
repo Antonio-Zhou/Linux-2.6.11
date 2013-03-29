@@ -44,6 +44,7 @@
 #define KERNEL_LOWMEM_END		__UL(0xd0000000)
 #define VMALLOC_START			__UL(0xd0000000)
 #define VMALLOC_END			__UL(0xd8000000)
+/*永久内核映射开始的线性地址*/
 #define PKMAP_BASE			__UL(0xd8000000)
 #define PKMAP_END			__UL(0xdc000000)
 #define KMAP_ATOMIC_SECONDARY_FRAME	__UL(0xdc000000)

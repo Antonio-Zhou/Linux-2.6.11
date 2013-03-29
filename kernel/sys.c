@@ -241,6 +241,13 @@ out:
 	return error;
 }
 
+/*
+*	作用于给定组中所有进程的基本优先级
+*	把给定组中所有进程的基本优先级都设置为一个给定的值
+*	参数:int which---指定进程组的值
+*		      int who---根据which值选择进程,如果who==0,则who = current->xxx
+*		      int niceval---新的基本优先级值,-20(最高)--+19(最小)
+*/
 asmlinkage long sys_setpriority(int which, int who, int niceval)
 {
 	struct task_struct *g, *p;
@@ -301,6 +308,11 @@ out:
  * has been offset by 20 (ie it returns 40..1 instead of -20..19)
  * to stay compatible.
  */
+
+/*
+*	作用于给定组中所有进程的基本优先级
+*	返回20减去给定组中所有进程中最低nice字段的值
+*/
 asmlinkage long sys_getpriority(int which, int who)
 {
 	struct task_struct *g, *p;

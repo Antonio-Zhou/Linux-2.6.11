@@ -35,21 +35,27 @@
  * remove_sequence is >= the insert_sequence which pertained when
  * flush_scheduled_work() was called.
  */
+
+/*
+*	cpu_workqueue_struct结构的worklist是双向链表的头,
+*	集中了工作队列中的所有挂起函数
+*	work_struct数据结构用来表示每一个挂起函数
+*/
 struct cpu_workqueue_struct {
 
-	spinlock_t lock;
+	spinlock_t lock;			/*保护该数据结构的自旋锁*/
 
-	long remove_sequence;	/* Least-recently added (next to run) */
-	long insert_sequence;	/* Next to add */
+	long remove_sequence;	/* Least-recently added (next to run) *//* flush_scheduled_work()使用的序列号*/
+	long insert_sequence;	/* Next to add */ /* flush_scheduled_work()使用的序列号*/
 
-	struct list_head worklist;
-	wait_queue_head_t more_work;
-	wait_queue_head_t work_done;
+	struct list_head worklist;	/*挂起链表的头结点*/
+	wait_queue_head_t more_work;		/*等待队列,其中的工作者线程因等待更多的工作而处于睡眠状态*/
+	wait_queue_head_t work_done;		/*等待队列,其中的进程由于等待工作队列被刷新而处于睡眠状态*/
 
-	struct workqueue_struct *wq;
-	task_t *thread;
+	struct workqueue_struct *wq;		/*指向workqueue_struct结构的指针,其中包含该描述符*/
+	task_t *thread;					/*指向结构中工作者线程的进程描述符指针*/
 
-	int run_depth;		/* Detect run_workqueue() recursion depth */
+	int run_depth;		/* Detect run_workqueue() recursion depth */	/*run_workqueue()当前的执行深度(当工作队列链表中的函数阻塞时,这个字段的值会变得比1大)*/
 } ____cacheline_aligned;
 
 /*
@@ -57,7 +63,7 @@ struct cpu_workqueue_struct {
  * per-CPU workqueues:
  */
 struct workqueue_struct {
-	struct cpu_workqueue_struct cpu_wq[NR_CPUS];
+	struct cpu_workqueue_struct cpu_wq[NR_CPUS];	/*NR_CPUS是系统中CPU的最大数量*/
 	const char *name;
 	struct list_head list; 	/* Empty if single thread */
 };
@@ -81,7 +87,9 @@ static void __queue_work(struct cpu_workqueue_struct *cwq,
 
 	spin_lock_irqsave(&cwq->lock, flags);
 	work->wq_data = cwq;
+	/*挂接*/
 	list_add_tail(&work->entry, &cwq->worklist);
+	/*递增插入的序列号*/
 	cwq->insert_sequence++;
 	wake_up(&cwq->more_work);
 	spin_unlock_irqrestore(&cwq->lock, flags);
@@ -94,14 +102,23 @@ static void __queue_work(struct cpu_workqueue_struct *cwq,
  * We queue the work to the CPU it was submitted, but there is no
  * guarantee that it will be processed by that CPU.
  */
+
+/*
+*	把函数插入工作队列,
+*	wq---指向workqueue_struct描述符
+*	work---指向work_struct描述符
+*/
 int fastcall queue_work(struct workqueue_struct *wq, struct work_struct *work)
 {
 	int ret = 0, cpu = get_cpu();
 
+	/*检查要插入的函数是否已经在工作队列中*/
 	if (!test_and_set_bit(0, &work->pending)) {
+		/*工作结构还没在队列,设置pending标志表示把工作结构挂接到队列中*/
 		if (unlikely(is_single_threaded(wq)))
 			cpu = 0;
 		BUG_ON(!list_empty(&work->entry));
+		/*把work_struct描述符加到工作队列链表中*/
 		__queue_work(wq->cpu_wq + cpu, work);
 		ret = 1;
 	}
@@ -109,6 +126,7 @@ int fastcall queue_work(struct workqueue_struct *wq, struct work_struct *work)
 	return ret;
 }
 
+/*定时中断函数*/
 static void delayed_work_timer_fn(unsigned long __data)
 {
 	struct work_struct *work = (struct work_struct *)__data;
@@ -118,24 +136,37 @@ static void delayed_work_timer_fn(unsigned long __data)
 	if (unlikely(is_single_threaded(wq)))
 		cpu = 0;
 
+	/*将工作结构添加到工作队列,注意这是在时间中断调用*/
 	__queue_work(wq->cpu_wq + cpu, work);
 }
 
+/*
+*	与queue_work()几乎相同,
+*	只是queue_delayed_work()函数多接收一个以系统嘀嗒数来表示时间延迟
+*	确保挂起函数在执行前的等待时间尽可能短
+*/
 int fastcall queue_delayed_work(struct workqueue_struct *wq,
 			struct work_struct *work, unsigned long delay)
 {
 	int ret = 0;
+	/*定时器,此时的定时器应该死不起效的,延迟将通过该定时器实现*/
 	struct timer_list *timer = &work->timer;
 
+	/*工作结构还没有在队列,设置pending标志表示把工作结构挂接到队列中*/
 	if (!test_and_set_bit(0, &work->pending)) {
+		/*现在定时器生效,出错*/
 		BUG_ON(timer_pending(timer));
+		/*工作结构已经挂接到链表,出错*/
 		BUG_ON(!list_empty(&work->entry));
 
 		/* This stores wq for the moment, for the timer_fn */
+		/*保存工作队列指针*/
 		work->wq_data = wq;
 		timer->expires = jiffies + delay;
 		timer->data = (unsigned long)work;
+		/*定时 函数*/
 		timer->function = delayed_work_timer_fn;
+		/*定时器生效,定时到期后再添加到工作队列*/
 		add_timer(timer);
 		ret = 1;
 	}
@@ -151,30 +182,43 @@ static inline void run_workqueue(struct cpu_workqueue_struct *cwq)
 	 * done.
 	 */
 	spin_lock_irqsave(&cwq->lock, flags);
+	/*统计递归调用的次数*/
 	cwq->run_depth++;
+	/*调度太多*/
 	if (cwq->run_depth > 3) {
 		/* morton gets to eat his hat */
 		printk("%s: recursion depth exceeded: %d\n",
 			__FUNCTION__, cwq->run_depth);
 		dump_stack();
 	}
+	/*遍历工作链表*/
 	while (!list_empty(&cwq->worklist)) {
+		/*获取的是next节点*/
 		struct work_struct *work = list_entry(cwq->worklist.next,
 						struct work_struct, entry);
 		void (*f) (void *) = work->func;
 		void *data = work->data;
 
+		/*删除节点,同时节点中的list参数清空*/
 		list_del_init(cwq->worklist.next);
 		spin_unlock_irqrestore(&cwq->lock, flags);
 
+		/*
+		*	现在执行以下代码时可以中断,run_workqueue本身可能会重新被调度
+		*	所以要判断递归深度
+		*/
 		BUG_ON(work->wq_data != cwq);
+		/*工作结构已经不再链表中*/
 		clear_bit(0, &work->pending);
+		/*执行工作函数*/
 		f(data);
 
 		spin_lock_irqsave(&cwq->lock, flags);
+		/*执行完的工作序列号递增*/
 		cwq->remove_sequence++;
 		wake_up(&cwq->work_done);
 	}
+	/*减少递归深度*/
 	cwq->run_depth--;
 	spin_unlock_irqrestore(&cwq->lock, flags);
 }
@@ -182,36 +226,49 @@ static inline void run_workqueue(struct cpu_workqueue_struct *cwq)
 static int worker_thread(void *__cwq)
 {
 	struct cpu_workqueue_struct *cwq = __cwq;
+	/*声明一个等待队列*/
 	DECLARE_WAITQUEUE(wait, current);
+	/*信号*/
 	struct k_sigaction sa;
 	sigset_t blocked;
 
 	current->flags |= PF_NOFREEZE;
-
+	
+	/*降低进程优先级,工作进程不是个很紧急的进程,不和其他进程抢占CPU,通常在系统空闲时运行*/
 	set_user_nice(current, -5);
 
 	/* Block and flush all signals */
+	/*阻塞所有信号*/
 	sigfillset(&blocked);
 	sigprocmask(SIG_BLOCK, &blocked, NULL);
 	flush_signals(current);
 
 	/* SIG_IGN makes children autoreap: see do_notify_parent(). */
+	/*信号处理都忽略*/
 	sa.sa.sa_handler = SIG_IGN;
 	sa.sa.sa_flags = 0;
 	siginitset(&sa.sa.sa_mask, sigmask(SIGCHLD));
 	do_sigaction(SIGCHLD, &sa, (struct k_sigaction *)0);
 
+	/*进程可中断*/
 	set_current_state(TASK_INTERRUPTIBLE);
+	/*没停止该进程就一直运行*/
 	while (!kthread_should_stop()) {
+		/*设置more_work等待队列,当有新work结构链入队列时,激发此等待队列*/
 		add_wait_queue(&cwq->more_work, &wait);
 		if (list_empty(&cwq->worklist))
+			/*工作队列为空,睡眠*/
 			schedule();
 		else
+			/*运行状态*/
 			__set_current_state(TASK_RUNNING);
+		/*删除等待队列*/
 		remove_wait_queue(&cwq->more_work, &wait);
 
+		/*按链表遍历,执行工作任务*/
 		if (!list_empty(&cwq->worklist))
 			run_workqueue(cwq);
+		/*执行完工作,设置进程是可中断的,重新循环等待工作*/
 		set_current_state(TASK_INTERRUPTIBLE);
 	}
 	__set_current_state(TASK_RUNNING);
@@ -225,21 +282,29 @@ static void flush_cpu_workqueue(struct cpu_workqueue_struct *cwq)
 		 * Probably keventd trying to flush its own queue. So simply run
 		 * it by hand rather than deadlocking.
 		 */
+		 /*
+		 *	如果是工作队列进程正在被调度,
+		 *	执行完该工作队列
+		*/
 		run_workqueue(cwq);
 	} else {
 		DEFINE_WAIT(wait);
 		long sequence_needed;
 
 		spin_lock_irq(&cwq->lock);
+		/*最新工作结构序号*/
 		sequence_needed = cwq->insert_sequence;
-
+		/*判断队列中是否有还有未执行的工作结构*/
 		while (sequence_needed - cwq->remove_sequence > 0) {
+			/*有未执行的,通过work_done等待*/
 			prepare_to_wait(&cwq->work_done, &wait,
 					TASK_UNINTERRUPTIBLE);
 			spin_unlock_irq(&cwq->lock);
+			/*睡眠,由wake_up(&cwq->work_done)唤醒*/
 			schedule();
 			spin_lock_irq(&cwq->lock);
 		}
+		/*等待清除*/
 		finish_wait(&cwq->work_done, &wait);
 		spin_unlock_irq(&cwq->lock);
 	}
@@ -261,8 +326,10 @@ static void flush_cpu_workqueue(struct cpu_workqueue_struct *cwq)
  */
 void fastcall flush_workqueue(struct workqueue_struct *wq)
 {
+	/*进程可以睡眠*/
 	might_sleep();
 
+	/*清空每个CPU上的工作队列*/
 	if (is_single_threaded(wq)) {
 		/* Always use cpu 0's area. */
 		flush_cpu_workqueue(wq->cpu_wq + 0);
@@ -276,27 +343,34 @@ void fastcall flush_workqueue(struct workqueue_struct *wq)
 	}
 }
 
+/*创建工作队列线程*/
 static struct task_struct *create_workqueue_thread(struct workqueue_struct *wq,
 						   int cpu)
 {
+	/*每个CPU的工作队列*/
 	struct cpu_workqueue_struct *cwq = wq->cpu_wq + cpu;
 	struct task_struct *p;
 
 	spin_lock_init(&cwq->lock);
+	/*初始化*/
 	cwq->wq = wq;
 	cwq->thread = NULL;
 	cwq->insert_sequence = 0;
 	cwq->remove_sequence = 0;
 	INIT_LIST_HEAD(&cwq->worklist);
+	/*初始化等待队列more_work,处理要执行的工作结构*/
 	init_waitqueue_head(&cwq->more_work);
+	/*初始化等待队列work_done,处理执行完的工作结构*/
 	init_waitqueue_head(&cwq->work_done);
 
+	/*建立内核线程work_thread*/
 	if (is_single_threaded(wq))
 		p = kthread_create(worker_thread, cwq, "%s", wq->name);
 	else
 		p = kthread_create(worker_thread, cwq, "%s/%d", wq->name, cpu);
 	if (IS_ERR(p))
 		return NULL;
+	/*保存线程指针*/
 	cwq->thread = p;
 	return p;
 }
@@ -310,6 +384,7 @@ struct workqueue_struct *__create_workqueue(const char *name,
 
 	BUG_ON(strlen(name) > 10);
 
+	/*分配工作队列结构空间*/
 	wq = kmalloc(sizeof(*wq), GFP_KERNEL);
 	if (!wq)
 		return NULL;
@@ -318,21 +393,32 @@ struct workqueue_struct *__create_workqueue(const char *name,
 	wq->name = name;
 	/* We don't need the distraction of CPUs appearing and vanishing. */
 	lock_cpu_hotplug();
+	/*
+	*	使用create_workqueue宏时，该参数始终为0
+	*	如果是单一模式,在单线程中调用各个工作队列
+	*	建立一个的工作队列内核线程
+	*/
 	if (singlethread) {
 		INIT_LIST_HEAD(&wq->list);
+		/*建立工作队列的线程*/
 		p = create_workqueue_thread(wq, 0);
 		if (!p)
 			destroy = 1;
 		else
+			/*唤醒该线程*/
 			wake_up_process(p);
 	} else {
 		spin_lock(&workqueue_lock);
+		/*链表模式,将工作队列添加到工作队列链表*/
 		list_add(&wq->list, &workqueues);
 		spin_unlock(&workqueue_lock);
+		/*为每个CPU建立一个工作队列线程*/
 		for_each_online_cpu(cpu) {
 			p = create_workqueue_thread(wq, cpu);
 			if (p) {
+				/*绑定CPU*/
 				kthread_bind(p, cpu);
+				/*唤醒线程*/
 				wake_up_process(p);
 			} else
 				destroy = 1;
@@ -344,6 +430,7 @@ struct workqueue_struct *__create_workqueue(const char *name,
 	 * Was there any error during startup? If yes then clean up:
 	 */
 	if (destroy) {
+		/*建立线程失败,释放工作队列*/
 		destroy_workqueue(wq);
 		wq = NULL;
 	}
@@ -365,14 +452,17 @@ static void cleanup_workqueue_thread(struct workqueue_struct *wq, int cpu)
 		kthread_stop(p);
 }
 
+/**/
 void destroy_workqueue(struct workqueue_struct *wq)
 {
 	int cpu;
 
+	/*清除当前工作队列中的所有工作*/
 	flush_workqueue(wq);
 
 	/* We don't need the distraction of CPUs appearing and vanishing. */
 	lock_cpu_hotplug();
+	/*结束该工作队列的线程*/
 	if (is_single_threaded(wq))
 		cleanup_workqueue_thread(wq, 0);
 	else {
@@ -386,13 +476,16 @@ void destroy_workqueue(struct workqueue_struct *wq)
 	kfree(wq);
 }
 
+/*预定义工作队列*/
 static struct workqueue_struct *keventd_wq;
 
+/*调度工作结构,将工作结构添加到事件工作队列kevent_wq*/
 int fastcall schedule_work(struct work_struct *work)
 {
 	return queue_work(keventd_wq, work);
 }
 
+/*延迟调度工作,延迟一定时间后再将工作结构挂接到工作队列*/
 int fastcall schedule_delayed_work(struct work_struct *work, unsigned long delay)
 {
 	return queue_delayed_work(keventd_wq, work, delay);

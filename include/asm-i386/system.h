@@ -359,7 +359,15 @@ struct alt_instr {
  * by the kernel should be already ordered. But keep a full barrier for now. 
  */
 
+/*适用于MP和UP的内存屏蔽*/
 #define mb() alternative("lock; addl $0,0(%%esp)", "mfence", X86_FEATURE_XMM2)
+/*
+*	适用于MP和UP的读内存屏蔽
+*	如果CPU支持lfence汇编语言指令,则展开为asm volatile("lfence")
+*	否则展开为asm volatile("lock; addl $0,0(%%esp)":::"memory")
+*	lock; addl $0,0(%%esp)---把0加到栈顶的内存单元
+*	lock前缀使得这条指令成为CPU的一个内存屏蔽
+*/
 #define rmb() alternative("lock; addl $0,0(%%esp)", "lfence", X86_FEATURE_XMM2)
 
 /**
@@ -419,6 +427,7 @@ struct alt_instr {
 #ifdef CONFIG_X86_OOSTORE
 /* Actually there are no OOO store capable CPUs for now that do SSE, 
    but make it already an possibility. */
+/*适用于MP和UP的写内存屏蔽*/
 #define wmb() alternative("lock; addl $0,0(%%esp)", "sfence", X86_FEATURE_XMM)
 #else
 #define wmb()	__asm__ __volatile__ ("": : :"memory")
@@ -441,9 +450,17 @@ struct alt_instr {
 #define set_wmb(var, value) do { var = value; wmb(); } while (0)
 
 /* interrupt control.. */
+/*
+*	保存eflags寄存器IF标志的状态值
+*	禁用本地CPU的中断
+*/
 #define local_save_flags(x)	do { typecheck(unsigned long,x); __asm__ __volatile__("pushfl ; popl %0":"=g" (x): /* no input */); } while (0)
+/*恢复local_save_flags()保存的IF标志(表示本地是关中断还是开中断)的状态*/
 #define local_irq_restore(x) 	do { typecheck(unsigned long,x); __asm__ __volatile__("pushl %0 ; popfl": /* no output */ :"g" (x):"memory", "cc"); } while (0)
+
+/*禁止本地中断cli*/
 #define local_irq_disable() 	__asm__ __volatile__("cli": : :"memory")
+/*激活本地中断*/
 #define local_irq_enable()	__asm__ __volatile__("sti": : :"memory")
 /* used in the idle loop; sti takes one instruction cycle to complete */
 #define safe_halt()		__asm__ __volatile__("sti; hlt": : :"memory")
@@ -456,6 +473,7 @@ struct alt_instr {
 })
 
 /* For spinlocks etc */
+/*保存eflags寄存器IF标志的状态值并禁用本地CPU的中断*/
 #define local_irq_save(x)	__asm__ __volatile__("pushfl ; popl %0 ; cli":"=g" (x): /* no input */ :"memory")
 
 /*

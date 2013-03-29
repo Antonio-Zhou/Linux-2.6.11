@@ -31,12 +31,19 @@ void ack_bad_irq(unsigned int irq)
 /*
  * per-CPU IRQ handling contexts (thread information and stack)
  */
+ /*
+ *每个CPU的中断上下文
+ *thread_info放在页的底部，栈使用其余的内存空间
+*thread_info与CPU相关联
+*/
 union irq_ctx {
 	struct thread_info      tinfo;
 	u32                     stack[THREAD_SIZE/sizeof(u32)];
 };
 
+/*所有硬中断请求*/
 static union irq_ctx *hardirq_ctx[NR_CPUS];
+ /*所有软中断请求*/
 static union irq_ctx *softirq_ctx[NR_CPUS];
 #endif
 
@@ -53,7 +60,9 @@ fastcall unsigned int do_IRQ(struct pt_regs *regs)
 	union irq_ctx *curctx, *irqctx;
 	u32 *isp;
 #endif
-
+/*
+*	使表示中断处理程序嵌套数量的计数器递增
+*/
 	irq_enter();
 #ifdef CONFIG_DEBUG_STACKOVERFLOW
 	/* Debugging check for stack overflow: is there less than 1KB free? */
@@ -70,9 +79,12 @@ fastcall unsigned int do_IRQ(struct pt_regs *regs)
 	}
 #endif
 
+/*thread_info结构的大小为4KB,函数切换到硬中断请求栈*/
 #ifdef CONFIG_4KSTACKS
 
+	/*内核栈(地址在esp中)相连的thread_info描述符的地址*/
 	curctx = (union irq_ctx *) current_thread_info();
+	/*hardirq_ctx[smp_processor_id()]的地址*/
 	irqctx = hardirq_ctx[smp_processor_id()];
 
 	/*
@@ -81,23 +93,43 @@ fastcall unsigned int do_IRQ(struct pt_regs *regs)
 	 * handler) we can't do that and just have to keep using the
 	 * current stack (which is the irq stack already after all)
 	 */
+	/***********没看懂!!!!!!在书的P180***********/
 	if (curctx != irqctx) {
 		int arg1, arg2, ebx;
 
 		/* build the stack frame on the IRQ stack */
+		/*切换内核栈*/
 		isp = (u32*) ((char*)irqctx + sizeof(*irqctx));
+		/*
+		*	保存当前进程描述符指针
+		*	完成这操作就能在内核使用硬中断请求栈时使当前宏按预先的期望工作
+		*/
 		irqctx->tinfo.task = curctx->tinfo.task;
+		/*
+		*	esp栈指针寄存器的当前值存入本地CPU的irq_ctx的tinfo.previous_esp 
+		*	仅当为内核oop准备函数调用跟踪时使用该字段
+		*/
 		irqctx->tinfo.previous_esp = current_stack_pointer;
 
 		asm volatile(
+			/*
+			*	把本地CPU硬中断请求栈的栈顶(值等于hardirq_ctx[smp_processor_id()]+4096)装入esp寄存器
+			*	以前esp的值存入ebx寄存器
+			*	成功则说明已经切换到硬中断请求栈
+			*/
 			"       xchgl   %%ebx,%%esp      \n"
 			"       call    __do_IRQ         \n"
+			/*把ebx寄存器中的原始指针拷贝到esp,从而回到以前在用的栈*/
 			"       movl   %%ebx,%%esp      \n"
 			: "=a" (arg1), "=d" (arg2), "=b" (ebx)
 			:  "0" (irq),   "1" (regs),  "2" (isp)
 			: "memory", "cc", "ecx"
 		);
-	} else
+	 /*
+	 *内核已经在使用硬中断请求栈
+	 *这种情况发生在内核处理另外一个中断时又产生了中断请求的时候
+	 */
+	} else	
 #endif
 		__do_IRQ(irq, regs);
 

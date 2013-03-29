@@ -16,12 +16,18 @@
  *                   timer.
  * @delay: delays this many clock cycles.
  */
+
+/*定时器对象*/
 struct timer_opts {
-	char* name;
-	void (*mark_offset)(void);
-	unsigned long (*get_offset)(void);
-	unsigned long long (*monotonic_clock)(void);
-	void (*delay)(unsigned long);
+	char* name;				/*标识一个定时器源的一个字符串*/
+	/*
+	*	记录上一个节拍的准确时间,由时钟中断处理程序调用
+	*	由时钟中断处理程序调用,并以适当的数据结构记录每个节拍到来时的准确时间
+	*/
+	void (*mark_offset)(void);	
+	unsigned long (*get_offset)(void);	/*返回自上一个节拍开始所经过的时间*/
+	unsigned long long (*monotonic_clock)(void);		/*返回自内核初始化开始锁经过的纳秒数*/
+	void (*delay)(unsigned long);	/*等待指定数目的"循环"*/
 };
 
 struct init_timer_opts {

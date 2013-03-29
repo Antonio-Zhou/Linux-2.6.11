@@ -472,6 +472,10 @@ void flush_tlb_all(void)
  * it goes straight through and wastes no time serializing
  * anything. Worst case is that we lose a reschedule ...
  */
+
+/*
+*	产生IPI,并强制目标CPU重新调度
+*/
 void smp_send_reschedule(int cpu)
 {
 	send_IPI_mask(cpumask_of_cpu(cpu), RESCHEDULE_VECTOR);
@@ -584,6 +588,10 @@ fastcall void smp_reschedule_interrupt(struct pt_regs *regs)
 	ack_APIC_irq();
 }
 
+/*
+*	IPI的高级中断处理程序
+*		应答本地APIC上的处理器中断,然后执行由中断触发的特定操作
+*/
 fastcall void smp_call_function_interrupt(struct pt_regs *regs)
 {
 	void (*func) (void *info) = call_data->func;

@@ -15,12 +15,12 @@ asmlinkage int printk(const char * fmt, ...)
  */
 
 typedef struct {
-	volatile unsigned int slock;
+	volatile unsigned int slock;		/*表示自旋锁的状态.==1表示"未加锁"状态, <=0表示"加锁"状态*/
 #ifdef CONFIG_DEBUG_SPINLOCK
 	unsigned magic;
 #endif
 #ifdef CONFIG_PREEMPT
-	unsigned int break_lock;
+	unsigned int break_lock;		/*进程正在忙等自旋锁(只在内核支持SMP和内核抢占的情况下使用该标志)*/
 #endif
 } spinlock_t;
 
@@ -34,6 +34,7 @@ typedef struct {
 
 #define SPIN_LOCK_UNLOCKED (spinlock_t) { 1 SPINLOCK_MAGIC_INIT }
 
+/*把自旋锁置为1(未锁)*/
 #define spin_lock_init(x)	do { *(x) = SPIN_LOCK_UNLOCKED; } while(0)
 
 /*
@@ -43,7 +44,9 @@ typedef struct {
  * We make no fairness assumptions. They have a cost.
  */
 
+/*如果 自旋锁被置为1(未锁),返回0,否则,返回1*/
 #define spin_is_locked(x)	(*(volatile signed char *)(&(x)->slock) <= 0)
+/*等待,直到自旋锁变为1*/
 #define spin_unlock_wait(x)	do { barrier(); } while(spin_is_locked(x))
 
 #define spin_lock_string \
@@ -165,6 +168,15 @@ static inline void _raw_spin_lock_flags (spinlock_t *lock, unsigned long flags)
  * read-locks.
  */
 typedef struct {
+	/*
+	*	32位字段,分为下面两个部分
+	*	24位计数器,表示对受保护的数据结构并发的进行读操作的内核控制路径的数目
+	*	这个计数器的补码放在这个字段的0-23位
+	*	"未锁"标志字段,当没有内核控制路径在读或写时设置该位,否则清0。这个"未锁"标志放在lock字段的第24位
+	*	lock == 0x01000000, 自旋锁为空
+	*	lock == 0x00000000, 写者已经获得自旋锁
+	*	lock == 0x00ffffff,0x00fffffe等,一个或者多个进程获取了自旋锁
+	*/
 	volatile unsigned int lock;
 #ifdef CONFIG_DEBUG_SPINLOCK
 	unsigned magic;
@@ -182,6 +194,7 @@ typedef struct {
 #define RWLOCK_MAGIC_INIT	/* */
 #endif
 
+/*RW_LOCK_BIAS==0x01000000*/
 #define RW_LOCK_UNLOCKED (rwlock_t) { RW_LOCK_BIAS RWLOCK_MAGIC_INIT }
 
 #define rwlock_init(x)	do { *(x) = RW_LOCK_UNLOCKED; } while(0)
@@ -228,10 +241,12 @@ static inline void _raw_write_lock(rwlock_t *rw)
 #define _raw_read_unlock(rw)		asm volatile("lock ; incl %0" :"=m" ((rw)->lock) : : "memory")
 #define _raw_write_unlock(rw)	asm volatile("lock ; addl $" RW_LOCK_BIAS_STR ",%0":"=m" ((rw)->lock) : : "memory")
 
+/*计数器lock字段的操作时原子的,但是整个函数的访问不是原子的*/
 static inline int _raw_read_trylock(rwlock_t *lock)
 {
 	atomic_t *count = (atomic_t *)lock;
 	atomic_dec(count);
+	/*此处if判断和return之间，计数器的值就有可能改变*/
 	if (atomic_read(count) >= 0)
 		return 1;
 	atomic_inc(count);
@@ -241,6 +256,10 @@ static inline int _raw_read_trylock(rwlock_t *lock)
 static inline int _raw_write_trylock(rwlock_t *lock)
 {
 	atomic_t *count = (atomic_t *)lock;
+	/*
+	*	从count中减去0x01000000,从而清除未上锁标志(第24位)
+	*	==0(没有读者),获取锁并返回1
+	*/
 	if (atomic_sub_and_test(RW_LOCK_BIAS, count))
 		return 1;
 	atomic_add(RW_LOCK_BIAS, count);

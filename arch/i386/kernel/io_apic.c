@@ -221,6 +221,13 @@ static void clear_IO_APIC (void)
 			clear_IO_APIC_pin(apic, pin);
 }
 
+/*
+*	实现CPU的IRQ亲和力:修改I/O APIC 的中断重定向表表项.
+*	可以把中断信号发送到某个特定的CPU上
+*	参数:	unsigned int irq---被重定向的IRQ向量
+*			cpumask_t cpumask---32位掩码(表示可以接收这个IRQ的CPU)
+*	/proc/irq/n/smp_affinity(n是中断向量)---改变指定中断IRQ的亲和力
+*/
 static void set_ioapic_affinity_irq(unsigned int irq, cpumask_t cpumask)
 {
 	unsigned long flags;
@@ -356,6 +363,12 @@ static inline void rotate_irqs_among_cpus(unsigned long useful_load_threshold)
 	return;
 }
 
+/*
+*	该函数跟踪在最近时间间隔内每个CPU接收的中断次数.
+*	如果该函数发现负荷最重的CPU和负荷最轻的CPU之间IRQ负载不平衡的问题太严重.
+*	它要么把IRQ从一个CPU转移到另外一个CPU,
+*	要么让所有的IRQ在所有CPU之间"轮转"
+*/
 static void do_irq_balance(void)
 {
 	int i, j;
@@ -563,6 +576,7 @@ static int balanced_irq(void *unused)
 	unsigned long prev_balance_time = jiffies;
 	long time_remaining = balanced_irq_interval;
 
+	/*kirqd 内核线程*/
 	daemonize("kirqd");
 	
 	/* push everything to CPU 0 to give us a starting point.  */
@@ -576,6 +590,7 @@ static int balanced_irq(void *unused)
 		try_to_freeze(PF_FREEZE);
 		if (time_after(jiffies,
 				prev_balance_time+balanced_irq_interval)) {
+			/*该函数跟踪在最近时间间隔内每个CPU接收的中断次数.*/
 			do_irq_balance();
 			prev_balance_time = jiffies;
 			time_remaining = balanced_irq_interval;
@@ -2268,6 +2283,11 @@ void __init setup_IO_APIC(void)
 	if (!acpi_ioapic)
 		setup_ioapic_ids_from_mpc();
 	sync_Arb_IDs();
+	/*
+	*	在系统启动过程中,初始化I/O APIC芯片
+	*	芯片的中断重定向表的24项被填充,
+	*	以便根据"最低优先级" 模式把来自I/O 硬件设备的所有信号都传递给系统中的每个CPU
+	*/
 	setup_IO_APIC_irqs();
 	init_IO_APIC_traps();
 	check_timer();

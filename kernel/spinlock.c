@@ -147,8 +147,13 @@ void __lockfunc _write_lock_bh(rwlock_t *lock)
 }
 EXPORT_SYMBOL(_write_lock_bh);
 
+/*
+*	在include/linux/spinlock.h中调用
+*	具有内核抢占的spin_lock
+*/
 void __lockfunc _spin_lock(spinlock_t *lock)
 {
+	/*禁用内核抢占*/
 	preempt_disable();
 	_raw_spin_lock(lock);
 }

@@ -52,6 +52,12 @@ extern struct rw_semaphore *FASTCALL(rwsem_downgrade_wake(struct rw_semaphore *s
  * the semaphore definition
  */
 struct rw_semaphore {
+	/*
+	*	存放两个16位计数器
+	*	最高16位计数器以二进制补码形式存放非等待写者进程的总数(0或1)
+	*		和等待的写内核控制路径数
+	*	最低16位计数器存放非等待的读者和写者进程的总数
+	*/
 	signed long		count;
 #define RWSEM_UNLOCKED_VALUE		0x00000000
 #define RWSEM_ACTIVE_BIAS		0x00000001
@@ -59,7 +65,9 @@ struct rw_semaphore {
 #define RWSEM_WAITING_BIAS		(-0x00010000)
 #define RWSEM_ACTIVE_READ_BIAS		RWSEM_ACTIVE_BIAS
 #define RWSEM_ACTIVE_WRITE_BIAS		(RWSEM_WAITING_BIAS + RWSEM_ACTIVE_BIAS)
+/*自旋锁,用于保护等待队列和rw_semaphore结构本身*/
 	spinlock_t		wait_lock;
+/*指向等待进程的链表*/
 	struct list_head	wait_list;
 #if RWSEM_DEBUG
 	int			debug;

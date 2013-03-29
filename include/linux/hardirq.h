@@ -60,6 +60,10 @@
  */
 #define in_irq()		(hardirq_count())
 #define in_softirq()		(softirq_count())
+/*
+*检查current_thread_info()->preempt_count的软中断计数器和硬中断计数器,
+*只要有一个为正数,产生一个正数,否则产生一个零值
+*/
 #define in_interrupt()		(irq_count())
 
 #if defined(CONFIG_PREEMPT) && !defined(CONFIG_PREEMPT_BKL)
@@ -95,6 +99,10 @@ static inline void account_system_vtime(struct task_struct *tsk)
 }
 #endif
 
+/*
+*	使表示中断处理程序嵌套数量的计数器递增
+*	计数器保存在当前进程thread_info结构的preempt_count中
+*/
 #define irq_enter()					\
 	do {						\
 		account_system_vtime(current);		\

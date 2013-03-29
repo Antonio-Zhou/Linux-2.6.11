@@ -220,14 +220,23 @@ typedef unsigned long page_flags_t;
  * moment. Note that we have no way to track which tasks are using
  * a page.
  */
+
+/*页描述符*/
 struct page {
+	/*一组标志,对页框所在的管理区进行编号*/
 	page_flags_t flags;		/* Atomic flags, some possibly
 					 * updated asynchronously */
+	/*页框的引用计数器*/
 	atomic_t _count;		/* Usage count, see below. */
+	/*页框中的页表项数目*/
 	atomic_t _mapcount;		/* Count of ptes mapped in mms,
 					 * to show when page is mapped
 					 * & limit reverse map searches.
 					 */
+	/*
+	*	可用于正在使用页的内核成分(例如，在缓冲页的情况下它是一个缓冲器头指针)。
+	*	如果页是空闲的，则该字段由伙伴系统使用
+	*/
 	unsigned long private;		/* Mapping-private opaque data:
 					 * usually used for buffer_heads
 					 * if PagePrivate set; used for
@@ -235,6 +244,7 @@ struct page {
 					 * When page is free, this indicates
 					 * order in the buddy system.
 					 */
+	/*当页被插入页高速缓冲中时使用，或者当页属于匿名区时使用*/
 	struct address_space *mapping;	/* If low bit clear, points to
 					 * inode address_space, or NULL.
 					 * If page mapped as anonymous
@@ -242,7 +252,9 @@ struct page {
 					 * it points to anon_vma object:
 					 * see PAGE_MAPPING_ANON below.
 					 */
+	/*作为不同的含义被几种内核成分使用*/
 	pgoff_t index;			/* Our offset within mapping. */
+	/*包含页的最近最少使用(LRU)双向链表的指针*/
 	struct list_head lru;		/* Pageout list, eg. active_list
 					 * protected by zone->lru_lock !
 					 */
@@ -416,6 +428,9 @@ static inline unsigned long page_to_nid(struct page *page)
 struct zone;
 extern struct zone *zone_table[];
 
+/*
+*	接收一个页描述符的地址作为它的参数,读取页描述符中flags的最高位
+*/
 static inline struct zone *page_zone(struct page *page)
 {
 	return zone_table[page->flags >> NODEZONE_SHIFT];
@@ -432,6 +447,9 @@ static inline void set_page_zone(struct page *page, unsigned long nodezone_num)
 extern struct page *mem_map;
 #endif
 
+/*
+*	计算页框下标,然后将其转换为物理地址,最后根据相应的物理地址得到线性地址
+*/
 static inline void *lowmem_page_address(struct page *page)
 {
 	return __va(page_to_pfn(page) << PAGE_SHIFT);

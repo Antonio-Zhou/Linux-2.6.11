@@ -32,6 +32,9 @@ extern void __lockfunc __release_kernel_lock(void);
 # define return_value_on_smp
 #endif
 
+/*
+*	保证不占用大内核锁
+*/
 static inline int reacquire_kernel_lock(struct task_struct *task)
 {
 	if (unlikely(task->lock_depth >= 0))

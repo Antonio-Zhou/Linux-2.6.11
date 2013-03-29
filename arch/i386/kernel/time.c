@@ -86,6 +86,10 @@ DEFINE_SPINLOCK(rtc_lock);
 DEFINE_SPINLOCK(i8253_lock);
 EXPORT_SYMBOL(i8253_lock);
 
+/*
+*	存放某个定时器对象的地址,该定时器是系统中可利用的定时器资源中"最好的"
+*	最初指向timer_none
+*/
 struct timer_opts *cur_timer = &timer_none;
 
 /*
@@ -101,9 +105,12 @@ void do_gettimeofday(struct timeval *tv)
 	do {
 		unsigned long lost;
 
+		/*为读获取xtime_lock顺序锁*/
 		seq = read_seqbegin(&xtime_lock);
 
+		/*get_offset方法确定来自上一次时钟中断以来所走过的微秒数*/
 		usec = cur_timer->get_offset();
+		/*如果某定时器中断丢失,加上相应延迟*/
 		lost = jiffies - wall_jiffies;
 
 		/*
@@ -122,9 +129,11 @@ void do_gettimeofday(struct timeval *tv)
 			usec += lost * (USEC_PER_SEC / HZ);
 
 		sec = xtime.tv_sec;
+		/*加上前一秒内走过的微秒数*/
 		usec += (xtime.tv_nsec / 1000);
 	} while (read_seqretry(&xtime_lock, seq));
 
+	/*检查微秒字段是否溢出*/
 	while (usec >= 1000000) {
 		usec -= 1000000;
 		sec++;
@@ -244,6 +253,11 @@ static inline void do_timer_interrupt(int irq, void *dev_id,
 	 * CMOS clock accordingly every ~11 minutes. Set_rtc_mmss() has to be
 	 * called as close as possible to 500 ms before the new second starts.
 	 */
+	 /*
+	 *	如果使用外部时钟来同步系统时钟,
+	 *	每隔660秒调用一次set_rtc_mmss()调整实时时钟
+	 *	帮助网络中的系统同步进它们的时钟
+	*/
 	if ((time_status & STA_UNSYNC) == 0 &&
 	    xtime.tv_sec > last_rtc_update + 660 &&
 	    (xtime.tv_nsec / 1000)
@@ -282,6 +296,8 @@ static inline void do_timer_interrupt(int irq, void *dev_id,
  * Time Stamp Counter value at the time of the timer interrupt, so that
  * we later on can estimate the time of day more exactly.
  */
+
+/*PIT或HPET的中断服务例程*/
 irqreturn_t timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	/*
@@ -291,13 +307,22 @@ irqreturn_t timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	 * the irq version of write_lock because as just said we have irq
 	 * locally disabled. -arca
 	 */
+	 /*保护与定时相关的内核变量*/
 	write_seqlock(&xtime_lock);
 
+	/*
+	*	cur_timer可能会指向四个对象
+	*	timer_hpet
+	*	timer_pmtmr
+	*	timer_tsc
+	*	timer_pit
+	*/
 	cur_timer->mark_offset();
  
 	do_timer_interrupt(irq, NULL, regs);
 
 	write_sequnlock(&xtime_lock);
+	/*返回1,报告中断已经有效的处理了*/
 	return IRQ_HANDLED;
 }
 
@@ -396,6 +421,7 @@ void __init hpet_time_init(void)
 }
 #endif
 
+/*建立即使体系结构*/
 void __init time_init(void)
 {
 #ifdef CONFIG_HPET_TIMER
@@ -408,13 +434,25 @@ void __init time_init(void)
 		return;
 	}
 #endif
+	/*初始化xtime变量,利用get_cmos_time()从实时时钟上读取自1970年1月1日(UTC)午夜以来经过的秒数*/
 	xtime.tv_sec = get_cmos_time();
+	/*使得即将发生的jiffies变量溢出与tv_sec字段的增加保持一致,落到秒的范围内*/
 	xtime.tv_nsec = (INITIAL_JIFFIES % HZ) * (NSEC_PER_SEC / HZ);
+	/*以此来获取单向(只增)的时间流*/
 	set_normalized_timespec(&wall_to_monotonic,
 		-xtime.tv_sec, -xtime.tv_nsec);
 
+	/*
+	*	挑选系统中可利用的最好的定时器资源
+	*	并设置cur_timer()变量指向该定时器资源对应的定时器对象的地址
+	*/
 	cur_timer = select_timer();
 	printk(KERN_INFO "Using %s for high-res timesource\n",cur_timer->name);
 
+	/*
+	*	创建与IRQ0相应的中断门
+	*	从现在开始,timer_interrupt()函数将会在每个节拍到来时被调用,
+	*	而中断被禁止,因为IRQ0主描述符的状态字段中的SA_INTERRUPT标志被设置
+	*/
 	time_init_hook();
 }

@@ -102,6 +102,9 @@ static int __devinit cpu_to_cpu_group(int cpu)
 }
 #endif
 
+/*
+*	物理CPU的sched_domain描述符都放在每CPU变量phys_domain中
+*/
 static DEFINE_PER_CPU(struct sched_domain, phys_domains);
 static struct sched_group sched_group_phys[NR_CPUS];
 static int __devinit cpu_to_phys_group(int cpu)

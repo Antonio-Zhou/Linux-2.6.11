@@ -65,12 +65,28 @@ typedef struct tvec_root_s {
 
 struct tvec_t_base_s {
 	spinlock_t lock;
+	/*
+	*	需要检查的动态定时器的最早到期时间,
+	*	如果timer_jiffies == jiffies,说明可延迟函数没有积压
+	*	如果timer_jiffies < jiffies,说明前几个节拍相关的可延迟函数必须处理
+	*	系统启动时,timer_jiffies == jiffies,且只能由run_timer_softirq()增加
+	*/
 	unsigned long timer_jiffies;
+	/*SMP中,指向由本地CPU当前正处理动态定时器的timer_list数据结构*/
 	struct timer_list *running_timer;
+	/*
+	*	包含一个vec数组,由256个list_head元素组成(256个动态定时器链表组成)
+	*	这个结构包含了在紧接着到来的255个节拍内将要到期的所有动态定时器
+	*/
 	tvec_root_t tv1;
+	/*tv2,tv3,tv4包含在紧接着到来的2^14-1,2^20-1,2^26-1个节拍内将要到期的所有动态定时器*/
 	tvec_t tv2;
 	tvec_t tv3;
 	tvec_t tv4;
+	/*
+	*	与前面的区别,vec数组最后一项是一个大的expires字段值的动态定时器链表.
+	*	不需要从其他数组补充,
+	*/
 	tvec_t tv5;
 } ____cacheline_aligned_in_smp;
 
@@ -340,6 +356,12 @@ EXPORT_SYMBOL(del_timer);
  * is known to not do this (a single shot timer) then use
  * del_singleshot_timer_sync() instead.
  */
+
+/*
+*	从链表中删除定时器,然后检查定时器函数是否还在其他CPU上运行,
+*	如果是,该函数等待,直到定时器函数结束
+*	要考虑定时器函数重新激活自己
+*/
 int del_timer_sync(struct timer_list *timer)
 {
 	tvec_base_t *base;
@@ -384,6 +406,11 @@ EXPORT_SYMBOL(del_timer_sync);
  *
  * The function returns whether it has deactivated a pending timer or not.
  */
+
+/*
+*	如果定时器函数不重新激活定时器,
+*	使用该函数使定时器无效,并等待直到定时器函数结束
+*/
 int del_singleshot_timer_sync(struct timer_list *timer)
 {
 	int ret = del_timer(timer);
@@ -398,6 +425,12 @@ int del_singleshot_timer_sync(struct timer_list *timer)
 EXPORT_SYMBOL(del_singleshot_timer_sync);
 #endif
 
+/*
+*	过滤定时器
+*	参数:	tvec_base_t *base: base地址
+*			tvec_t *tv: base->tv(2-4)的地址
+*			int index:	base->tv(2-4)中链表的索引值(包括在紧接着到来的256个节拍内将要到期的定时器)
+*/
 static int cascade(tvec_base_t *base, tvec_t *tv, int index)
 {
 	/* cascade all the timers from tv up one level */
@@ -435,15 +468,29 @@ static inline void __run_timers(tvec_base_t *base)
 {
 	struct timer_list *timer;
 
+	/*获得base->lock自旋锁并禁止本地中断*/
 	spin_lock_irq(&base->lock);
+	/*
+	*	base->timer_jiffies > jiffies时停止
+	*	一般情况下,该循环会连续执行jiffies-base->timer_jiffies+1次
+	*/
 	while (time_after_eq(jiffies, base->timer_jiffies)) {
 		struct list_head work_list = LIST_HEAD_INIT(work_list);
 		struct list_head *head = &work_list;
+		/*
+		*	计算base->tv1中链表的索引
+		*	该索引保留着下一次要处理的定时器
+		*	TVR_MASK = 1111 1111
+		*/
  		int index = base->timer_jiffies & TVR_MASK;
  
 		/*
 		 * Cascade timers:
 		 */
+		 /*
+		 *	若index == 0 说明base->tv1中所有链表已经被检查过
+		 *	调用cascade()过滤动态定时器
+		*/
 		if (!index &&
 			(!cascade(base, &base->tv2, INDEX(0))) &&
 				(!cascade(base, &base->tv3, INDEX(1))) &&
@@ -452,6 +499,7 @@ static inline void __run_timers(tvec_base_t *base)
 		++base->timer_jiffies; 
 		list_splice_init(base->tv1.vec + index, &work_list);
 repeat:
+	/*对于base->tv1.vec[index]链表上的每一个定时器,执行它所对应的定时器函数*/
 		if (!list_empty(head)) {
 			void (*fn)(unsigned long);
 			unsigned long data;
@@ -460,7 +508,9 @@ repeat:
  			fn = timer->function;
  			data = timer->data;
 
+			/*将t从base->tv1的链表上删除*/
 			list_del(&timer->entry);
+			/*SMP中,将base->running_timer设置为&t*/
 			set_running_timer(base, timer);
 			smp_wmb();
 			timer->base = NULL;
@@ -477,6 +527,10 @@ repeat:
 			goto repeat;
 		}
 	}
+	/*
+	*	所有到期的定时器已经被处理了.
+	*	SMP中,base->running_timer==NULL
+	*/
 	set_running_timer(base, NULL);
 	spin_unlock_irq(&base->lock);
 }
@@ -810,19 +864,28 @@ static void update_wall_time(unsigned long ticks)
  * Called from the timer interrupt handler to charge one tick to the current 
  * process.  user_tick is 1 if the tick is user time, 0 for system.
  */
+
+/*
+*	更新一些内核统计数
+*	单处理器全局中断处理程序或多处理器系统上的本地时钟中断处理程序调用
+*/
 void update_process_times(int user_tick)
 {
 	struct task_struct *p = current;
 	int cpu = smp_processor_id();
 
 	/* Note: this timer irq context must be accounted for as well. */
-	if (user_tick)
+	/*检查当前进程运行了多长时间*/
+	if (user_tick)	/*时钟中断发生时是用户态*/
 		account_user_time(p, jiffies_to_cputime(1));
-	else
+	else		/*时钟中断发生时是内核态*/
 		account_system_time(p, HARDIRQ_OFFSET, jiffies_to_cputime(1));
+	/*调用raise_softirq(),激活本地CPU上的TIMER_SOFTIRQ任务队列*/
 	run_local_timers();
+	/*判断是否必须回收一些老版本的,受RCU保护的数据结构*/
 	if (rcu_pending(cpu))
 		rcu_check_callbacks(cpu, user_tick);
+	/*使当前进程的时间片计数器减1,并检查计数器是否已减到0*/
 	scheduler_tick();
 }
 
@@ -879,8 +942,14 @@ EXPORT_SYMBOL(xtime_lock);
 /*
  * This function runs timers and the timer-tq in bottom half context.
  */
+ 
+ /*
+ *	与TIMER_SOFTIRQ相关的可延迟函数
+ *	软定时器的处理
+*/
 static void run_timer_softirq(struct softirq_action *h)
 {
+	/*把本地CPU相关的tvec_bases数据结构*/
 	tvec_base_t *base = &__get_cpu_var(tvec_bases);
 
 	if (time_after_eq(jiffies, base->timer_jiffies))
@@ -899,15 +968,33 @@ void run_local_timers(void)
  * Called by the timer interrupt. xtime_lock must already be taken
  * by the timer IRQ!
  */
+ /*
+ *	更新xtime变量的值
+ *	用户程序从xtime中获得当前时间和日期,
+ *	内核周期性的更新该变量,才能使它的值保持相当的精确
+ *	此时已经获得写操作的xtime_lock顺序锁
+ */
 static inline void update_times(void)
 {
 	unsigned long ticks;
 
+	/*
+	*	wall_jiffies存放xtime最后更新的时间
+	*	wall_jiffies可以小于jiffies-1,因为一些定时器中断会丢失
+	*	也就是,内核不必每个时钟节拍更新xtime,但是最后不会有时钟节拍丢失
+	*	xtime最终存放正确的系统时间
+	*	对丢失的定时器中断的检查在cur_timer的mark_offset中完成
+	*/
 	ticks = jiffies - wall_jiffies;
 	if (ticks) {
 		wall_jiffies += ticks;
+		/*更新xtime.tv_nsec和xtime.tv_sec*/
 		update_wall_time(ticks);
 	}
+	/*
+	*	计算处于TASK_RUNNING或TASK_UNINTERRUPTBLE状态的进程数,
+	*	并用这个数据更新平均系统负载
+	*/
 	calc_load(ticks);
 }
   
@@ -920,6 +1007,7 @@ static inline void update_times(void)
 void do_timer(struct pt_regs *regs)
 {
 	jiffies_64++;
+	/*更新系统日期和时间,并计算当前系统负载*/
 	update_times();
 }
 
@@ -1039,6 +1127,7 @@ asmlinkage long sys_getegid(void)
 
 #endif
 
+/*唤醒挂起进程*/
 static void process_timeout(unsigned long __data)
 {
 	wake_up_process((task_t *)__data);
@@ -1085,7 +1174,7 @@ fastcall signed long __sched schedule_timeout(signed long timeout)
 		 * but I' d like to return a valid offset (>=0) to allow
 		 * the caller to do everything it want with the retval.
 		 */
-		schedule();
+		schedule();	/*进程挂起直到定时器到时*/
 		goto out;
 	default:
 		/*
@@ -1110,6 +1199,7 @@ fastcall signed long __sched schedule_timeout(signed long timeout)
 	init_timer(&timer);
 	timer.expires = expire;
 	timer.data = (unsigned long) current;
+	/*延时到期,唤醒挂起进程*/
 	timer.function = process_timeout;
 
 	add_timer(&timer);
@@ -1119,6 +1209,10 @@ fastcall signed long __sched schedule_timeout(signed long timeout)
 	timeout = expire - jiffies;
 
  out:
+ 	/*
+ 	*	0:	延时到期
+ 	*	timeout:	如果进程因某些原因被唤醒,到延时到期时还剩余的节拍数
+	*/
 	return timeout < 0 ? 0 : timeout;
 }
 
@@ -1162,14 +1256,21 @@ asmlinkage long sys_nanosleep(struct timespec __user *rqtp, struct timespec __us
 	unsigned long expire;
 	long ret;
 
+	/*将包含在timespec结构(用户态下)中的值复制到局部变量t中.*/
 	if (copy_from_user(&t, rqtp, sizeof(t)))
 		return -EFAULT;
 
 	if ((t.tv_nsec >= 1000000000L) || (t.tv_nsec < 0) || (t.tv_sec < 0))
 		return -EINVAL;
 
+	/*将timespec结构中的时间间隔转换为节拍数*/
 	expire = timespec_to_jiffies(&t) + (t.tv_sec || t.tv_nsec);
 	current->state = TASK_INTERRUPTIBLE;
+	/*
+	*	进程延迟
+	*	expire == 0:	进程延时到期,系统调用结束
+	*	否则,系统调用自动重新启动
+	*/
 	expire = schedule_timeout(expire);
 
 	ret = 0;

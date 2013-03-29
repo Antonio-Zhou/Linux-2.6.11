@@ -10,8 +10,8 @@
 #ifndef _STRUCT_TIMESPEC
 #define _STRUCT_TIMESPEC
 struct timespec {
-	time_t	tv_sec;		/* seconds */
-	long	tv_nsec;	/* nanoseconds */
+	time_t	tv_sec;		/* seconds */		/*存放自1970年1月1日(UTC)午夜以来经过的秒数*/
+	long	tv_nsec;	/* nanoseconds */		/*存放自上一秒开始经过的纳秒数(0-999999999)*/
 };
 #endif /* _STRUCT_TIMESPEC */
 
@@ -78,8 +78,15 @@ mktime (unsigned int year, unsigned int mon,
 	)*60 + sec; /* finally seconds */
 }
 
+/*每个节拍更新一次*/
 extern struct timespec xtime;
+/*存放将被加到xtime上的秒数和纳秒数,以此来获取单向(只增)的时间流*/
 extern struct timespec wall_to_monotonic;
+/*
+*	消除了对xtime变量的同事访问而可能发生的竞争条件
+*	同时保护jiffies_64变量
+*	这个顺序锁用来定义计时体系结构中的一些临界区
+*/
 extern seqlock_t xtime_lock;
 
 static inline unsigned long get_seconds(void)
@@ -153,7 +160,9 @@ struct	itimerval {
 /*
  * The IDs of the various system clocks (for POSIX.1b interval timers).
  */
+ /*系统的实时时钟*/
 #define CLOCK_REALTIME		  0
+/*与外部时间源的同步*/
 #define CLOCK_MONOTONIC	  1
 #define CLOCK_PROCESS_CPUTIME_ID 2
 #define CLOCK_THREAD_CPUTIME_ID	 3

@@ -20,18 +20,21 @@
 #define inc_preempt_count() add_preempt_count(1)
 #define dec_preempt_count() sub_preempt_count(1)
 
+/*在thread_info描述符中选择preempt_count字段*/
 #define preempt_count()	(current_thread_info()->preempt_count)
 
 #ifdef CONFIG_PREEMPT
 
 asmlinkage void preempt_schedule(void);
 
+/*抢占计数器加1*/
 #define preempt_disable() \
 do { \
 	inc_preempt_count(); \
 	barrier(); \
 } while (0)
 
+/*抢占计数器减1*/
 #define preempt_enable_no_resched() \
 do { \
 	barrier(); \
@@ -44,6 +47,7 @@ do { \
 		preempt_schedule(); \
 } while (0)
 
+/*使抢占计数器减1,并在thread_info描述符的TIF_NEED_RESCHED标志被置为1的情况下,调用preempt_schedule()*/
 #define preempt_enable() \
 do { \
 	preempt_enable_no_resched(); \

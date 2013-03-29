@@ -97,6 +97,11 @@ EXPORT_SYMBOL(disable_irq);
  *
  *	This function may be called from IRQ context.
  */
+/*
+*	检测是否发生了中断丢失
+*	如果发生了，就强迫让硬件让丢失的中断再产生一次
+*/
+
 void enable_irq(unsigned int irq)
 {
 	irq_desc_t *desc = irq_desc + irq;
@@ -112,7 +117,9 @@ void enable_irq(unsigned int irq)
 
 		desc->status = status;
 		if ((status & (IRQ_PENDING | IRQ_REPLAY)) == IRQ_PENDING) {
+			/*IRQ_REPLAY确保只产生一个自我中断*/
 			desc->status = status | IRQ_REPLAY;
+			/*产生一个新中断,这可以通过强制本地APIC产生一个自我中断来达到*/
 			hw_resend_irq(desc->handler,irq);
 		}
 		desc->handler->enable(irq);
@@ -181,14 +188,17 @@ int setup_irq(unsigned int irq, struct irqaction * new)
 	 */
 	spin_lock_irqsave(&desc->lock,flags);
 	p = &desc->action;
+	/*检查另一个设备是否已经在使用irq*/
 	if ((old = *p) != NULL) {
 		/* Can't share interrupts unless both agree to */
+		/*检查两个设备的irqaction描述符中的SA_SHIRQ是否都指定了IRQ线被共享*/
 		if (!(old->flags & new->flags & SA_SHIRQ)) {
 			spin_unlock_irqrestore(&desc->lock,flags);
 			return -EBUSY;
 		}
 
 		/* add new interrupt at end of irq queue */
+		/*把*new加到由链表末尾*/
 		do {
 			p = &old->next;
 			old = *p;
@@ -197,11 +207,13 @@ int setup_irq(unsigned int irq, struct irqaction * new)
 	}
 
 	*p = new;
-
+	
+	/*没有其他设备共享同一个IRQ,清IRQ_DISABLED ,IRQ_AUTODETECT, IRQ_WAITING ,IRQ_INPROGRESS*/
 	if (!shared) {
 		desc->depth = 0;
 		desc->status &= ~(IRQ_DISABLED | IRQ_AUTODETECT |
 				  IRQ_WAITING | IRQ_INPROGRESS);
+		/*确保激活IRQ信号*/
 		if (desc->handler->startup)
 			desc->handler->startup(irq);
 		else

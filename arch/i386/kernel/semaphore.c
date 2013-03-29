@@ -54,6 +54,10 @@ fastcall void __up(struct semaphore *sem)
 	wake_up(&sem->wait);
 }
 
+/*
+*	把当前进程的状态从TASK_RUNNING改变为TASK_UNINTERRUPTBLE,并把进程放在信号量的等待队列中
+*	如果没有进程在信号量等待队列上睡眠,则信号量的sleepers==0,否则==1
+*/
 fastcall void __sched __down(struct semaphore * sem)
 {
 	struct task_struct *tsk = current;
@@ -61,6 +65,7 @@ fastcall void __sched __down(struct semaphore * sem)
 	unsigned long flags;
 
 	tsk->state = TASK_UNINTERRUPTIBLE;
+	/*获得自旋锁,保护信号量等待队列*/
 	spin_lock_irqsave(&sem->wait.lock, flags);
 	add_wait_queue_exclusive_locked(&sem->wait, &wait);
 

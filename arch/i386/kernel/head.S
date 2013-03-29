@@ -378,8 +378,10 @@ rp_sidt:
 
 /* This is the default interrupt "handler" :-) */
 	ALIGN
+	/*应该从不被执行*/
 ignore_int:
 	cld
+		/* 保存寄存器的内容*/
 	pushl %eax
 	pushl %ecx
 	pushl %edx
@@ -393,13 +395,16 @@ ignore_int:
 	pushl 32(%esp)
 	pushl 40(%esp)
 	pushl $int_msg
+	/*打印"Unkown Interrupt" 系统信息*/
 	call printk
 	addl $(5*4),%esp
+	/*恢复寄存器的内容*/
 	popl %ds
 	popl %es
 	popl %edx
 	popl %ecx
 	popl %eax
+	/*恢复被中断的程序*/
 	iret
 
 /*

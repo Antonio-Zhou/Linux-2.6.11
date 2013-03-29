@@ -82,6 +82,10 @@ static struct irqaction irq0  = { timer_interrupt, SA_INTERRUPT, CPU_MASK_NONE, 
  **/
 void __init time_init_hook(void)
 {
+	/*
+	*	创建与IRQ0相应的中断门
+	*	IRQ0引脚连接着系统时钟中断源(PI或HPET)
+	*/
 	setup_irq(0, &irq0);
 }
 

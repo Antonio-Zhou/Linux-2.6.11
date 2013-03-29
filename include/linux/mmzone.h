@@ -21,7 +21,12 @@
 #endif
 
 struct free_area {
+	/*
+	*	双向循环链表的头,
+	*	该链表包含每个空闲页框块(大小为2^k)的起始页框的页框内描述符
+	*/
 	struct list_head	free_list;
+	/*指定了大小为2^k的空闲块的个数*/
 	unsigned long		nr_free;
 };
 
@@ -62,8 +67,17 @@ struct per_cpu_pageset {
 #endif
 } ____cacheline_aligned_in_smp;
 
+/*包含低于16MB的内存页框，可以由老式基于ISA的设备通过DMA使用*/
 #define ZONE_DMA		0
+/*
+*	包含高于16MB且低于896MB的内存页框。
+*	通过ZONE_DMA和ZONE_NORMAL把它们线性地址映射到线性地址空间的第4个GB
+*/
 #define ZONE_NORMAL		1
+/*
+*	包含从896MB开始高于896MB的内存页框。
+*	包含的页不能由内存直接访问到，尽管它们也线性的映射到了线性地址空间的第4个GB
+*/
 #define ZONE_HIGHMEM		2
 
 #define MAX_NR_ZONES		3	/* Sync this with ZONES_SHIFT */
@@ -230,6 +244,11 @@ struct zone {
  * so despite the zonelist table being relatively big, the cache
  * footprint of this construct is very small.
  */
+
+/*
+*	管理区描述符指针数组
+*	zonlist在内存分配请求中指定首选管理区,
+*/
 struct zonelist {
 	struct zone *zones[MAX_NUMNODES * MAX_NR_ZONES + 1]; // NULL delimited
 };
@@ -248,19 +267,32 @@ struct zonelist {
  */
 struct bootmem_data;
 typedef struct pglist_data {
+	/*节点中管理区描述符的数组*/
 	struct zone node_zones[MAX_NR_ZONES];
+	/*页分配器使用zonelist数据结构放入数组*/
 	struct zonelist node_zonelists[GFP_ZONETYPES];
+	/*节点中管理区的个数*/
 	int nr_zones;
+	/*节点中页描述符的数组*/
 	struct page *node_mem_map;
+	/*用在内核初始化阶段*/
 	struct bootmem_data *bdata;
+	/*节点中第一个页框的下标*/
 	unsigned long node_start_pfn;
+	/*内存节点的大小，不包括洞（以页框为单位）*/
 	unsigned long node_present_pages; /* total number of physical pages */
+	/*节点的大小，包括洞(以页框为单位)*/
 	unsigned long node_spanned_pages; /* total size of physical page
 					     range, including holes */
+	/*节点标识符*/
 	int node_id;
+	/*内存节点链表中的下一项*/
 	struct pglist_data *pgdat_next;
+	/*kswapd页换出守护进程使用放入等待队列*/
 	wait_queue_head_t kswapd_wait;
+	/*指针指向kswapd内核线程的进程描述符*/
 	struct task_struct *kswapd;
+	/*kswapd将要创建的空闲块大小取对数的值*/
 	int kswapd_max_order;
 } pg_data_t;
 
@@ -374,6 +406,10 @@ int lowmem_reserve_ratio_sysctl_handler(struct ctl_table *, int, struct file *,
 
 #ifndef CONFIG_DISCONTIGMEM
 
+/*
+*	节点0的描述符
+*	它的node_zonelists字段是一个管理区描述符链表的数组,代表后备管理区
+*/
 extern struct pglist_data contig_page_data;
 #define NODE_DATA(nid)		(&contig_page_data)
 #define NODE_MEM_MAP(nid)	mem_map

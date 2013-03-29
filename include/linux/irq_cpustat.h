@@ -23,6 +23,7 @@ extern irq_cpustat_t irq_stat[];		/* defined in asm/hardirq.h */
 #endif
 
   /* arch independent irq_stat fields */
+/*选择本地CPU的软中断位掩码*/
 #define local_softirq_pending() \
 	__IRQ_STAT(smp_processor_id(), __softirq_pending)
 

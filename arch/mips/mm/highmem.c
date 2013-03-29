@@ -3,6 +3,9 @@
 #include <linux/highmem.h>
 #include <asm/tlbflush.h>
 
+/*
+*	建立永久内核映射
+*/
 void *__kmap(struct page *page)
 {
 	void *addr;
@@ -16,6 +19,9 @@ void *__kmap(struct page *page)
 	return addr;
 }
 
+/*
+*	撤销kamp()建立的永久内核映射
+*/
 void __kunmap(struct page *page)
 {
 	if (in_interrupt())
@@ -34,6 +40,9 @@ void __kunmap(struct page *page)
  * kmaps are appropriate for short, tight code paths only.
  */
 
+/*
+*	建立临时内核映射
+*/
 void *__kmap_atomic(struct page *page, enum km_type type)
 {
 	enum fixed_addresses idx;
@@ -44,6 +53,7 @@ void *__kmap_atomic(struct page *page, enum km_type type)
 	if (!PageHighMem(page))
 		return page_address(page);
 
+	/*type和smp_processor_id()指定必须使用哪个固定映射的线性地址映射请求页*/
 	idx = type + KM_TYPE_NR*smp_processor_id();
 	vaddr = __fix_to_virt(FIX_KMAP_BEGIN + idx);
 #ifdef CONFIG_DEBUG_HIGHMEM
@@ -51,6 +61,7 @@ void *__kmap_atomic(struct page *page, enum km_type type)
 		BUG();
 #endif
 	set_pte(kmap_pte-idx, mk_pte(page, kmap_prot));
+	/*刷新适当的TLB项*/
 	local_flush_tlb_one((unsigned long)vaddr);
 
 	return (void*) vaddr;

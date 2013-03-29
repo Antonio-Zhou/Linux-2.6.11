@@ -15,8 +15,13 @@
 
 static inline void do_timer_interrupt_hook(struct pt_regs *regs)
 {
+	/*
+	*	jiffies_64++
+	*	update_times
+	*/
 	do_timer(regs);
 #ifndef CONFIG_SMP
+	/*为本地CPU执行几个与定时相关的计数操作*/
 	update_process_times(user_mode(regs));
 #endif
 /*
@@ -25,6 +30,7 @@ static inline void do_timer_interrupt_hook(struct pt_regs *regs)
  * system, in that case we have to call the local interrupt handler.
  */
 #ifndef CONFIG_X86_LOCAL_APIC
+	/**/
 	profile_tick(CPU_PROFILING, regs);
 #else
 	if (!using_apic_timer)

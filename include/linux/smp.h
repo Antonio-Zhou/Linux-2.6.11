@@ -138,8 +138,11 @@ static inline void smp_send_reschedule(int cpu) { }
 # define _smp_processor_id() smp_processor_id()
 #endif
 
+/*与preempt_disable()相似,但要返回本地CPU的数量*/
 #define get_cpu()		({ preempt_disable(); smp_processor_id(); })
+/*与preempt_enable()相似*/
 #define put_cpu()		preempt_enable()
+/*与preempt_enable_no_resched()相同*/
 #define put_cpu_no_resched()	preempt_enable_no_resched()
 
 #endif /* __LINUX_SMP_H */

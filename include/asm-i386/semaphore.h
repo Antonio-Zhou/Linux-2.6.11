@@ -42,8 +42,18 @@
 #include <linux/rwsem.h>
 
 struct semaphore {
+	/*
+	*	>0:	资源是空闲的,即是现在可以使用的
+	*	=0:	信号量是忙的,但没有进程等待这个被保护的资源
+	*	<0:	资源是不可用的,并至少有一个进程等待资源
+	*/
 	atomic_t count;
+	/*一个标志,表示是否有一些进程在信号量上睡眠.*/
 	int sleepers;
+	/*
+	*	等待队列链表的地址,当前等待资源的所有睡眠进程都放在这个链表中.
+	*	count >=0, 等待队列为空
+	*/
 	wait_queue_head_t wait;
 };
 
@@ -77,11 +87,13 @@ static inline void sema_init (struct semaphore *sem, int val)
 	init_waitqueue_head(&sem->wait);
 }
 
+/*初始化信号量,互斥访问的资源空闲*/
 static inline void init_MUTEX (struct semaphore *sem)
 {
 	sema_init(sem, 1);
 }
 
+/*对信号量进行初始化的进程当前互斥访问的资源忙*/
 static inline void init_MUTEX_LOCKED (struct semaphore *sem)
 {
 	sema_init(sem, 0);
@@ -102,6 +114,11 @@ fastcall void __up(struct semaphore * sem);
  * "__down_failed" is a special asm handler that calls the C
  * routine that actually waits. See arch/i386/kernel/semaphore.c
  */
+
+/*
+*	只有异常处理程序,特别是系统调用服务例程,才能调用down()函数
+*	中断处理函数不必调用down(),
+*/
 static inline void down(struct semaphore * sem)
 {
 	might_sleep();
@@ -124,6 +141,12 @@ static inline void down(struct semaphore * sem)
  * Interruptible try to acquire a semaphore.  If we obtained
  * it, return zero.  If we were interrupted, returns -EINTR
  */
+
+/*
+*	广泛的应用在设备驱动程序中,
+*	如果进程接收了一个信号但在信号量上被阻塞,就允许进程放弃down()
+
+*/
 static inline int down_interruptible(struct semaphore * sem)
 {
 	int result;
@@ -150,6 +173,11 @@ static inline int down_interruptible(struct semaphore * sem)
  * Non-blockingly attempt to down() a semaphore.
  * Returns zero if we acquired it
  */
+
+/*
+*	异步函数安全的使用
+*	在资源繁忙时,该函数会立即返回,而不是让进程去睡眠
+*/
 static inline int down_trylock(struct semaphore * sem)
 {
 	int result;
@@ -177,6 +205,11 @@ static inline int down_trylock(struct semaphore * sem)
  * The default case (no contention) will result in NO
  * jumps for both down() and up().
  */
+ /*
+ *	获取信号量
+ *	增加*sem信号量count字段的值
+ *	count的增加和jump指令所测试的标志的设置都必须原子地执行
+*/
 static inline void up(struct semaphore * sem)
 {
 	__asm__ __volatile__(

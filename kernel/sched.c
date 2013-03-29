@@ -55,6 +55,9 @@
  * and back.
  */
 #define NICE_TO_PRIO(nice)	(MAX_RT_PRIO + (nice) + 20)
+/*
+*	把prio转换到nice值范围
+*/
 #define PRIO_TO_NICE(prio)	((prio) - MAX_RT_PRIO - 20)
 #define TASK_NICE(p)		PRIO_TO_NICE((p)->static_prio)
 
@@ -121,6 +124,10 @@
  * too hard.
  */
 
+
+/*
+*	计算进程原来的平均睡眠时间的bonus值
+*/
 #define CURRENT_BONUS(p) \
 	(NS_TO_JIFFIES((p)->sleep_avg) * MAX_BONUS / \
 		MAX_SLEEP_AVG)
@@ -128,6 +135,10 @@
 #define GRANULARITY	(10 * HZ / 1000 ? : 1)
 
 #ifdef CONFIG_SMP
+/*
+*	产生两个数的乘积给当前进程的bonus
+*	一个数是系统中CPU的数量,另一个是成比例的常量
+*/
 #define TIMESLICE_GRANULARITY(p)	(GRANULARITY * \
 		(1 << (((MAX_BONUS - CURRENT_BONUS(p)) ? : 1) - 1)) * \
 			num_online_cpus())
@@ -142,13 +153,20 @@
 #define DELTA(p) \
 	(SCALE(TASK_NICE(p), 40, MAX_BONUS) + INTERACTIVE_DELTA)
 
+/*若进程是交互式进程,TASK_INTERACTIVE产生1*/
 #define TASK_INTERACTIVE(p) \
 	((p)->prio <= (p)->static_prio - DELTA(p))
 
+/*
+*	进程的睡眠时间极限,依赖于进程的静态优先级,
+*/
 #define INTERACTIVE_SLEEP(p) \
 	(JIFFIES_TO_NS(MAX_SLEEP_AVG * \
 		(MAX_BONUS / 2 + DELTA((p)) + 1) / MAX_BONUS - 1))
 
+/*	
+*	检查可运行的新进程的动态优先级比rq运行队列中当前进程的动态优先级高
+*/
 #define TASK_PREEMPTS_CURR(p, rq) \
 	((p)->prio < (rq)->curr->prio)
 
@@ -183,8 +201,11 @@ static unsigned int task_timeslice(task_t *p)
 typedef struct runqueue runqueue_t;
 
 struct prio_array {
+	/*链表中进程描述符的数量*/
 	unsigned int nr_active;
+	/*优先权位图,当且仅当某个优先权的进程链表不为空时设置相应的位标志*/
 	unsigned long bitmap[BITMAP_SIZE];
+	/*140个优先权队列的头结点*/
 	struct list_head queue[MAX_PRIO];
 };
 
@@ -196,17 +217,17 @@ struct prio_array {
  * acquire operations must be ordered by ascending &runqueue.
  */
 struct runqueue {
-	spinlock_t lock;
+	spinlock_t lock;		/*保护进程链表的自旋锁*/
 
 	/*
 	 * nr_running and cpu_load should be in the same cacheline because
 	 * remote CPUs use both these fields when doing load calculation.
 	 */
-	unsigned long nr_running;
+	unsigned long nr_running;	/*运行队列链表中可运行进程的数量*/
 #ifdef CONFIG_SMP
-	unsigned long cpu_load;
+	unsigned long cpu_load;	/*基于运行队列中进程的平均数量的CPU负载因子*/
 #endif
-	unsigned long long nr_switches;
+	unsigned long long nr_switches;	/*CPU执行进程切换的次数*/
 
 	/*
 	 * This is part of a global counter where only the total sum
@@ -214,24 +235,55 @@ struct runqueue {
 	 * one CPU and if it got migrated afterwards it may decrease
 	 * it on another CPU. Always updated under the runqueue lock:
 	 */
+	 /*
+	 *	先前在运行队列中而现在睡眠在TASK_UNINTERRUPTIBLE状态的进程的数量
+	 *	(对所有运行队列来说,只有这些字段的总数才是有意义的)
+	 */
 	unsigned long nr_uninterruptible;
 
+	/*过期队列中最老的进程被插入队列的时间*/
 	unsigned long expired_timestamp;
+	/*最近一次定时器中断的时间戳的值*/
 	unsigned long long timestamp_last_tick;
+	/*
+	*	curr---当前正在运行进程的进程描述符指针(对本地CPU,它与current相同)
+	*	idle---当前CPU(This CPU) 上swapper进程的进程描述符指针
+	*/
 	task_t *curr, *idle;
+	/*在进程切换期间用来存放被替换进程的内存描述符的地址*/
 	struct mm_struct *prev_mm;
+	/*
+	*	active---指向活动进程链表的指针
+	*	expired---指向过期进程链表的指针
+	*	arrays---活动进程和过期进程的两个集合
+	*			包括两个prio_array_t结构的数组,
+	*			每个数据结构都表示一个可运行进程的集合,
+	*			并包括140个双向链表头(每个链表对应一个可能的进程优先级),一个优先级位图和一个集合中所包括的进程数量的计数器
+	*	arrays中的两个数据结构的作用会发生周期性的变化:活动进程和过期进程的互换
+	*/
 	prio_array_t *active, *expired, arrays[2];
+	/*过期进程中静态优先级最高的进程,(权重最小)*/
 	int best_expired_prio;
+	/*先前在运行队列的链表中而现在正等待磁盘I/O操作结束的进程的数量*/
 	atomic_t nr_iowait;
 
 #ifdef CONFIG_SMP
+	/*
+	*	指向当前CPU的基本调度域
+	*	支持超线程技术---sd字段指向cpu_domains,
+	*	不支持超线程技术---sd字段指向phys_domains,即它们是基本调度域
+	*/
 	struct sched_domain *sd;
 
 	/* For active balancing */
+	/*如果要把一些进程从本地运行队列迁移到另外的运行队列(平衡运行队列),就设置这个标志*/
 	int active_balance;
+	/*未使用*/
 	int push_cpu;
 
+	/*迁移内核线程的进程描述符指针*/
 	task_t *migration_thread;
+	/*从运行队列中被删除的进程的描述符*/
 	struct list_head migration_queue;
 #endif
 
@@ -283,7 +335,9 @@ static DEFINE_PER_CPU(struct runqueue, runqueues);
 #define for_each_domain(cpu, domain) \
 	for (domain = cpu_rq(cpu)->sd; domain; domain = domain->parent)
 
+/*产生索引为cpu的CPU的运行队列的地址*/
 #define cpu_rq(cpu)		(&per_cpu(runqueues, (cpu)))
+/* 产生本地CPU运行队列的地址*/
 #define this_rq()		(&__get_cpu_var(runqueues))
 #define task_rq(p)		cpu_rq(task_cpu(p))
 #define cpu_curr(cpu)		(cpu_rq(cpu)->curr)
@@ -631,6 +685,8 @@ static int effective_prio(task_t *p)
 /*
  * __activate_task - move a task to the runqueue.
  */
+
+/*把进程描述符插入活动进程集合*/
 static inline void __activate_task(task_t *p, runqueue_t *rq)
 {
 	enqueue_task(p, rq->active);
@@ -646,16 +702,26 @@ static inline void __activate_idle_task(task_t *p, runqueue_t *rq)
 	rq->nr_running++;
 }
 
+/*
+*	更新进程的平均睡眠时间和动态优先级
+*	参数:task_t *p---进程描述符指针
+*		     unsigned long long now---由函数sched_clock()计算出的当前时间戳now
+*/
 static void recalc_task_prio(task_t *p, unsigned long long now)
 {
 	unsigned long long __sleep_time = now - p->timestamp;
 	unsigned long sleep_time;
 
+	/*
+	*	p->timestamp包含导致进程进入睡眠状态的进程切换的时间戳
+	*	sleep_time存放的是从进程最后一次执行开始,进程消耗在睡眠状态的纳秒数
+	*/
 	if (__sleep_time > NS_MAX_SLEEP_AVG)
 		sleep_time = NS_MAX_SLEEP_AVG;
 	else
 		sleep_time = (unsigned long)__sleep_time;
 
+	/*更新进程平均睡眠时间*/
 	if (likely(sleep_time > 0)) {
 		/*
 		 * User tasks that sleep a long time are categorised as
@@ -663,8 +729,20 @@ static void recalc_task_prio(task_t *p, unsigned long long now)
 		 * prevent them suddenly becoming cpu hogs and starving
 		 * other processes.
 		 */
+
+		/*
+		*	下面三个判断的意义是:
+		*	不是内核线程,从TASK_UNINTERRUPTIBLE状态被唤醒,进程连续睡眠时间是否超过给定的睡眠时间极限
+		*
+		*/
 		if (p->mm && p->activated != -1 &&
 			sleep_time > INTERACTIVE_SLEEP(p)) {
+				/*
+				*	p->sleep_avg 设置为相当于900个时钟节拍的值
+				*	用最大平均睡眠时间减去一个标准进程的基本时间片长度获得的一个经验值
+				*	保证已经在不可中断模式上睡眠了很长时间的进程获得一个预先确定而且足够长的平均睡眠时间,
+				*		以使这些进程既能尽快获得服务,又不会因为睡眠时间太长而引起其他进程的饥饿
+				*/
 				p->sleep_avg = JIFFIES_TO_NS(MAX_SLEEP_AVG -
 						DEF_TIMESLICE);
 		} else {
@@ -672,6 +750,19 @@ static void recalc_task_prio(task_t *p, unsigned long long now)
 			 * The lower the sleep avg a task has the more
 			 * rapidly it will rise with sleep time.
 			 */
+			 	
+			 /*
+			*	MAX_BONUS=(MAX_USER_PRIO * PRIO_BONUS_RATIO / 100)=10
+			*						|		    		|
+			*			(USER_PRIO(MAX_PRIO))	      25
+			*						|
+			*			MAX_PRIO-MAX_RT_PRIO=100
+			*				|
+			*		MAX_RT_PRIO+40
+			*						|
+			*						40
+			*	因为要将sleep_time增加到进程平均睡眠时间上,所以当前进程平均睡眠时间越短,它增加的就越快
+			*/
 			sleep_time *= (MAX_BONUS - CURRENT_BONUS(p)) ? : 1;
 
 			/*
@@ -679,6 +770,10 @@ static void recalc_task_prio(task_t *p, unsigned long long now)
 			 * limited in their sleep_avg rise as they
 			 * are likely to be waiting on I/O
 			 */
+
+			/*
+			*	不是内核线程,处于TASK_UNINTERRUPTIBLE状态
+			*/
 			if (p->activated == -1 && p->mm) {
 				if (p->sleep_avg >= INTERACTIVE_SLEEP(p))
 					sleep_time = 0;
@@ -697,13 +792,17 @@ static void recalc_task_prio(task_t *p, unsigned long long now)
 			 * task spends sleeping, the higher the average gets -
 			 * and the higher the priority boost gets as well.
 			 */
+
+			/*sleep_time加到p->sleep_avg*/
 			p->sleep_avg += sleep_time;
 
+			/*1000个时钟节拍代表了什么*/
 			if (p->sleep_avg > NS_MAX_SLEEP_AVG)
 				p->sleep_avg = NS_MAX_SLEEP_AVG;
 		}
 	}
 
+	/*更新进程的动态优先级*/
 	p->prio = effective_prio(p);
 }
 
@@ -717,22 +816,28 @@ static void activate_task(task_t *p, runqueue_t *rq, int local)
 {
 	unsigned long long now;
 
+	/*调用以纳秒为单位的当前时间戳*/
 	now = sched_clock();
 #ifdef CONFIG_SMP
+	/*不是本地CPU,就要补偿本地时钟中断的偏差*/
 	if (!local) {
 		/* Compensate for drifting sched_clock */
 		runqueue_t *this_rq = this_rq();
+		/*通过使用本地CPU和目标CPU上最近发生时钟中断的相对时戳来达到的*/
 		now = (now - this_rq->timestamp_last_tick)
 			+ rq->timestamp_last_tick;
 	}
 #endif
 
+	/*把进程描述符的指针和上一步计算出的时间戳传递给它,*/
 	recalc_task_prio(p, now);
 
 	/*
 	 * This checks to make sure it's not an uninterruptible task
 	 * that is now waking up.
 	 */
+	 
+	 /*设置p->activated*/
 	if (!p->activated) {
 		/*
 		 * Tasks which were woken up by interrupts (ie. hw events)
@@ -751,6 +856,8 @@ static void activate_task(task_t *p, runqueue_t *rq, int local)
 			p->activated = 1;
 		}
 	}
+
+	/*利用sched_clock()的时间戳设置p->timestamp*/
 	p->timestamp = now;
 
 	__activate_task(p, rq);
@@ -759,6 +866,10 @@ static void activate_task(task_t *p, runqueue_t *rq, int local)
 /*
  * deactivate_task - remove a task from the runqueue.
  */
+
+/*
+*	将p从运行队列中删除
+*/
 static void deactivate_task(struct task_struct *p, runqueue_t *rq)
 {
 	rq->nr_running--;
@@ -774,6 +885,9 @@ static void deactivate_task(struct task_struct *p, runqueue_t *rq)
  * the target CPU.
  */
 #ifdef CONFIG_SMP
+/*
+*	抢占进程
+*/
 static void resched_task(task_t *p)
 {
 	int need_resched, nrpolling;
@@ -982,6 +1096,13 @@ static inline int wake_idle(int cpu, task_t *p)
  *
  * returns failure only if the task is already active.
  */
+
+/*
+*	通过把进程状态设置为TASK_RUNNING,并把该进程插入本地CPU的运行队列来唤醒睡眠或停止的进程
+*	参数:task_t * p---被唤醒进程的描述符指针
+*		     unsigned int state---可以被唤醒的进程状态掩码
+*		     int sync---一个标志,用来禁止被唤醒的进程抢占本地CPU上正在运行的进程
+*/
 static int try_to_wake_up(task_t * p, unsigned int state, int sync)
 {
 	int cpu, this_cpu, success = 0;
@@ -994,17 +1115,31 @@ static int try_to_wake_up(task_t * p, unsigned int state, int sync)
 	int new_cpu;
 #endif
 
+	/*
+	*	禁用本地中断,并获得最后执行进程的CPU所拥有的运行队列rq的锁,
+	*	CPU逻辑号存储在p->thread_info->cpu字段
+	*/
 	rq = task_rq_lock(p, &flags);
 	schedstat_inc(rq, ttwu_cnt);
 	old_state = p->state;
+	/*
+	*	检查进程的状态是否属于被当作参数传递给函数的状态掩码state
+	*	为什么这么做呢
+	*/
 	if (!(old_state & state))
 		goto out;
-
+	/*如果p->array字段不等于NULL,那么进程已经属于某个运行队列,*/
 	if (p->array)
 		goto out_running;
 
 	cpu = task_cpu(p);
 	this_cpu = smp_processor_id();
+
+	/*
+	*	在SMP中,要检查要被唤醒的进程是否应该从最近运行的CPU的运行队列迁移到另外一个CPU的运行队列
+	*	执行完这一步,函数已经确定了目标CPU和对应的目标运行队列rq,
+	*	前者将要执行被唤醒的进程,后者就是进程插入的队列
+	*/
 
 #ifdef CONFIG_SMP
 	if (unlikely(task_running(rq, p)))
@@ -1088,6 +1223,12 @@ out_set_cpu:
 
 out_activate:
 #endif /* CONFIG_SMP */
+
+	/*
+	*	如果进程处于TASK_UNINTERRUPTIBLE状态,函数递减目标运行队列的nr_uninterruptible
+	*	并把p->activated置为1
+	*	???????????????????????????????????????????为什么
+	*/
 	if (old_state == TASK_UNINTERRUPTIBLE) {
 		rq->nr_uninterruptible--;
 		/*
@@ -1106,6 +1247,9 @@ out_activate:
 	 * to be considered on this CPU.)
 	 */
 	activate_task(p, rq, cpu == this_cpu);
+	/*
+	*	如果目标CPU不是本地CPU,或者没有设置sync标志,
+	*/
 	if (!sync || cpu != this_cpu) {
 		if (TASK_PREEMPTS_CURR(p, rq))
 			resched_task(rq->curr);
@@ -1117,9 +1261,16 @@ out_running:
 out:
 	task_rq_unlock(rq, &flags);
 
+	/*
+	*	1---成功唤醒进程
+	*	0---进程没有被唤醒
+	*/
 	return success;
 }
 
+/*
+*	唤醒线程或进程
+*/
 int fastcall wake_up_process(task_t * p)
 {
 	return try_to_wake_up(p, TASK_STOPPED | TASK_TRACED |
@@ -1172,12 +1323,17 @@ void fastcall sched_fork(task_t *p)
 	 * resulting in more scheduling fairness.
 	 */
 	local_irq_disable();
+	/*父进程将自己时间片中剩余的节拍数的一半分给子进程*/
 	p->time_slice = (current->time_slice + 1) >> 1;
 	/*
 	 * The remainder of the first timeslice might be recovered by
 	 * the parent if the child exits early enough.
 	 */
 	p->first_time_slice = 1;
+	/*
+	*	父进程将自己时间片中剩余的节拍数的一半分给自己
+	*	避免用户获得无限的CPU时间
+	*/
 	current->time_slice >>= 1;
 	p->timestamp = sched_clock();
 	if (unlikely(!current->time_slice)) {
@@ -1214,6 +1370,7 @@ void fastcall wake_up_new_task(task_t * p, unsigned long clone_flags)
 
 	BUG_ON(p->state != TASK_RUNNING);
 
+	/*调整父进程和子进程的调度参数??????????不知道是哪一个函数*/
 	schedstat_inc(rq, wunt_cnt);
 	/*
 	 * We decrease the sleep average of forking parents
@@ -1235,6 +1392,8 @@ void fastcall wake_up_new_task(task_t * p, unsigned long clone_flags)
 			 */
 			if (unlikely(!current->array))
 				__activate_task(p, rq);
+			/*子进程和父进程运行在同一CPU上,而且不能共享同一组页表(CLONE_VM被清零),
+			把子进程插入父进程运行列表，插入时让子进程恰好在父进程前面,迫使子进程先于父进程运行*/
 			else {
 				p->prio = current->prio;
 				list_add_tail(&p->run_list, &current->run_list);
@@ -1244,6 +1403,7 @@ void fastcall wake_up_new_task(task_t * p, unsigned long clone_flags)
 			}
 			set_need_resched();
 		} else
+		/**/
 			/* Run child last */
 			__activate_task(p, rq);
 		/*
@@ -1346,7 +1506,12 @@ static void finish_task_switch(task_t *prev)
 	prev_task_flags = prev->flags;
 	finish_arch_switch(rq, prev);
 	if (mm)
+		/*
+		*	减少内存描述符的使用计数器
+		*	如果计数器== 0,还要释放与页表相关的所有描述符和虚拟存储区
+		*/
 		mmdrop(mm);
+	/*检查prev是否是正在从系统中被删除的僵死任务*/
 	if (unlikely(prev_task_flags & PF_DEAD))
 		put_task_struct(prev);
 }
@@ -1368,19 +1533,31 @@ asmlinkage void schedule_tail(task_t *prev)
  * context_switch - switch to the new MM and the new
  * thread's register state.
  */
+
+/*
+*	在进程发生切换时,建立next的地址空间
+*	active_mm指向进程所使用的内存描述符,
+*	mm指向进程所拥有的内存描述符
+*	对于一般进程,这两个字段的地址相同,但是内核线程没有自己的地址空间,它的mm总是设置为NULL
+*/
 static inline
 task_t * context_switch(runqueue_t *rq, task_t *prev, task_t *next)
 {
 	struct mm_struct *mm = next->mm;
 	struct mm_struct *oldmm = prev->active_mm;
 
+	/*next是内核线程,它使用prev所使用的地址空间*/
 	if (unlikely(!mm)) {
 		next->active_mm = oldmm;
 		atomic_inc(&oldmm->mm_count);
 		enter_lazy_tlb(oldmm, next);
-	} else
+	} else		/*next是普通进程,用next地址空间替换prev的地址空间*/
 		switch_mm(oldmm, mm, next);
 
+	/*
+	*	prev是内核线程或正在退出的进程
+	*	把指向prev内存描述符的指针保存到运行队列的prev_mm,重新设置prev->active_mm
+	*/
 	if (unlikely(!prev->mm)) {
 		prev->active_mm = NULL;
 		WARN_ON(rq->prev_mm);
@@ -1388,6 +1565,7 @@ task_t * context_switch(runqueue_t *rq, task_t *prev, task_t *next)
 	}
 
 	/* Here we just switch the register state and the stack. */
+	/*执行进程切换*/
 	switch_to(prev, next, prev);
 
 	return prev;
@@ -1493,6 +1671,11 @@ static void double_rq_unlock(runqueue_t *rq1, runqueue_t *rq2)
 /*
  * double_lock_balance - lock the busiest runqueue, this_rq is locked already.
  */
+
+/*
+*	获得busiest->lock
+*	为了避免死锁,首先释放this_rq->lock,然后通过增加CPU下标获得锁
+*/
 static void double_lock_balance(runqueue_t *this_rq, runqueue_t *busiest)
 	__releases(this_rq->lock)
 	__acquires(busiest->lock)
@@ -1640,6 +1823,7 @@ void pull_task(runqueue_t *src_rq, prio_array_t *src_array, task_t *p,
 	 * Note that idle threads have a prio of MAX_PRIO, for this test
 	 * to be always true for them.
 	 */
+	 /*抢占本地CPU当前进程*/
 	if (TASK_PREEMPTS_CURR(p, this_rq))
 		resched_task(this_rq->curr);
 }
@@ -1647,6 +1831,16 @@ void pull_task(runqueue_t *src_rq, prio_array_t *src_array, task_t *p,
 /*
  * can_migrate_task - may task p from runqueue rq be migrated to this_cpu?
  */
+
+/*
+*	返回1的条件:
+*	进程当前没有在远程CPU上执行
+*	本地CPU包含在进程描述符的cpus_allowed位掩码中
+*	至少满足下列条件一个:
+*		本地CPU空闲.如果内核支持超线程技术,则所有本地物理芯片中的逻辑CPU必须空闲
+*		内核在平衡调度域时因反复进行进程迁移都不成功而陷入困境
+*		被迁移的进程不是"高速缓存命中"的(最近不曾在远程CPU上执行,因此可以设想远程CPU上的硬件高速缓存中没有该进程的数据)
+*/
 static inline
 int can_migrate_task(task_t *p, runqueue_t *rq, int this_cpu,
 		     struct sched_domain *sd, enum idle_type idle)
@@ -1684,6 +1878,16 @@ int can_migrate_task(task_t *p, runqueue_t *rq, int this_cpu,
  *
  * Called with both runqueues locked.
  */
+
+/*
+*	把函数从源运行队列迁移到本地运行队列
+*	参数:runqueue_t *this_rq---本地运行队列描述符
+*		     int this_cpu---本地CPU下标
+*		     runqueue_t *busiest---源运行队列描述符
+*		     unsigned long max_nr_move---被迁移进程的最大数
+*		     struct sched_domain *sd---在其中执行平衡操作的调度域的描述符地址
+*		     enum idle_type idle---idle标志
+*/
 static int move_tasks(runqueue_t *this_rq, int this_cpu, runqueue_t *busiest,
 		      unsigned long max_nr_move, struct sched_domain *sd,
 		      enum idle_type idle)
@@ -1702,10 +1906,11 @@ static int move_tasks(runqueue_t *this_rq, int this_cpu, runqueue_t *busiest,
 	 * be cache-cold, thus switching CPUs has the least effect
 	 * on them.
 	 */
+	 /*分析过期进程,从高优先级开始*/
 	if (busiest->expired->nr_active) {
 		array = busiest->expired;
 		dst_array = this_rq->expired;
-	} else {
+	} else {		/*分析活动进程*/
 		array = busiest->active;
 		dst_array = this_rq->active;
 	}
@@ -1749,6 +1954,7 @@ skip_queue:
 	schedstat_inc(this_rq, pt_gained[idle]);
 	schedstat_inc(busiest, pt_lost[idle]);
 
+	/*把候选进程迁移到本地运行队列中*/
 	pull_task(busiest, array, tmp, this_rq, dst_array, this_cpu);
 	pulled++;
 
@@ -1768,6 +1974,14 @@ out:
  * domain. It calculates and returns the number of tasks which should be
  * moved to restore balance via the imbalance parameter.
  */
+
+/*
+*	分析调度域中各组的工作量,
+*	返回最繁忙的组的sched_group描述符地址
+*	假设这个组不包括本地CPU,函数返回为了恢复平衡而被迁移到本地运行队列的进程数
+*	如果最繁忙的组包括本地CPU或所有组是平衡的,函数返回NULL
+*/
+
 static struct sched_group *
 find_busiest_group(struct sched_domain *sd, int this_cpu,
 		   unsigned long *imbalance, enum idle_type idle)
@@ -1904,6 +2118,11 @@ out_balanced:
 /*
  * find_busiest_queue - find the busiest runqueue among the cpus in group.
  */
+
+/*
+*	查找上面的组中最繁忙的CPU,
+*	返回相应运行队列的描述符地址busiest
+*/
 static runqueue_t *find_busiest_queue(struct sched_group *group)
 {
 	unsigned long load, max_load = 0;
@@ -1928,6 +2147,15 @@ static runqueue_t *find_busiest_queue(struct sched_group *group)
  *
  * Called with this_rq unlocked.
  */
+
+/*
+*	检查是否调度域处于严重的不平衡状态,
+*	更确切的说,检查是否可以通过把最繁忙的组中的一些进程迁移到本地CPU的运行队列来减轻不平衡的状态
+*	参数:int this_cpu---本地CPU
+*		     runqueue_t *this_rq---本地运行队列描述符的地址
+*		     struct sched_domain *sd---指向被检查的调度域的描述符
+*		     enum idle_type idle---SCHED_IDLE或NOT_IDLE
+*/
 static int load_balance(int this_cpu, runqueue_t *this_rq,
 			struct sched_domain *sd, enum idle_type idle)
 {
@@ -1939,12 +2167,20 @@ static int load_balance(int this_cpu, runqueue_t *this_rq,
 	spin_lock(&this_rq->lock);
 	schedstat_inc(sd, lb_cnt[idle]);
 
+	/*分析调度域中各组的工作量*/
 	group = find_busiest_group(sd, this_cpu, &imbalance, idle);
+	/*
+	*	没有找到既不包括本地CPU又非常繁忙的组,
+	*	执行下面的步骤:1.释放this_rq->lock,
+	*	2.调整调度域描述符的参数,以延迟本地CPU下一次对load_balance()的调度
+	*	3.最后函数终止
+	*/
 	if (!group) {
 		schedstat_inc(sd, lb_nobusyg[idle]);
 		goto out_balanced;
 	}
 
+	/*查找上面的组中最繁忙的CPU,*/
 	busiest = find_busiest_queue(group);
 	if (!busiest) {
 		schedstat_inc(sd, lb_nobusyq[idle]);
@@ -1971,13 +2207,16 @@ static int load_balance(int this_cpu, runqueue_t *this_rq,
 		 * still unbalanced. nr_moved simply stays zero, so it is
 		 * correctly treated as an imbalance.
 		 */
+		 /*获得busiest->lock*/
 		double_lock_balance(this_rq, busiest);
+		/*尝试从最繁忙的运行队列中把一些进程迁移到本地运行队列this_rq中*/
 		nr_moved = move_tasks(this_rq, this_cpu, busiest,
 						imbalance, sd, idle);
 		spin_unlock(&busiest->lock);
 	}
 	spin_unlock(&this_rq->lock);
 
+	/*move_tasks()失败*/
 	if (!nr_moved) {
 		schedstat_inc(sd, lb_failed[idle]);
 		sd->nr_balance_failed++;
@@ -1986,6 +2225,7 @@ static int load_balance(int this_cpu, runqueue_t *this_rq,
 			int wake = 0;
 
 			spin_lock(&busiest->lock);
+			/*调度域不平衡*/
 			if (!busiest->active_balance) {
 				busiest->active_balance = 1;
 				busiest->push_cpu = this_cpu;
@@ -1993,6 +2233,11 @@ static int load_balance(int this_cpu, runqueue_t *this_rq,
 			}
 			spin_unlock(&busiest->lock);
 			if (wake)
+				/*
+				*	唤醒migration内核线程
+				*	migration线程顺着调度域的链搜索(从最繁忙运行队列的基本域到最上层域,寻找空闲CPU)
+				*	如果找到一个空闲CPU,该内核线程就调用move_task()
+				*/
 				wake_up_process(busiest->migration_thread);
 
 			/*
@@ -2171,6 +2416,7 @@ static void rebalance_tick(int this_cpu, runqueue_t *this_rq,
 	struct sched_domain *sd;
 
 	/* Update our load */
+	/*确定运行队列中的进程数,并更新运行队列的平均工作量*/
 	old_load = this_rq->cpu_load;
 	this_load = this_rq->nr_running * SCHED_LOAD_SCALE;
 	/*
@@ -2178,6 +2424,7 @@ static void rebalance_tick(int this_cpu, runqueue_t *this_rq,
 	 * prevents us from getting stuck on 9 if the load is 10, for
 	 * example.
 	 */
+	 /*循环所有调度域,从基本域(本地sd所引用的域)到最上层的域*/
 	if (this_load > old_load)
 		old_load++;
 	this_rq->cpu_load = (old_load + this_load) / 2;
@@ -2250,6 +2497,13 @@ EXPORT_PER_CPU_SYMBOL(kstat);
  * increasing number of running tasks. We also ignore the interactivity
  * if a better static_prio task has expired:
  */
+
+/*	
+*	EXPIRED_STARVING检查运行队列中的第一个过期进程的等待时间是否已经超过1000个时钟节拍乘以运行运行队列中的可运行进程数加1
+*	若是,宏产生1
+*	如果当前进程的静态优先级大于一个过期进程的静态优先级,
+*	EXPIRED_STARVING也产生值1.
+*/
 #define EXPIRED_STARVING(rq) \
 	((STARVATION_LIMIT && ((rq)->expired_timestamp && \
 		(jiffies - (rq)->expired_timestamp >= \
@@ -2359,15 +2613,22 @@ void account_system_time(struct task_struct *p, int hardirq_offset,
 	runqueue_t *rq = this_rq();
 	cputime64_t tmp;
 
+	/*
+	*	更新当前进程描述符的stime
+	*	只在父进程询问它的其中一个子进程的状态时才对cstime和cutime更新
+	*/
 	p->stime = cputime_add(p->stime, cputime);
 
 	/* Check for signals (SIGPROF, SIGXCPU & SIGKILL). */
+	/*检查是否已达到总的CPU时限*/
 	if (likely(p->signal && p->exit_state < EXIT_ZOMBIE)) {
 		check_rlimit(p, cputime);
+		/*检查进程定时器*/
 		account_it_prof(p, cputime);
 	}
 
 	/* Add system time to cpustat. */
+	/*更新内核统计数据,放在kstat中*/
 	tmp = cputime_to_cputime64(cputime);
 	if (hardirq_count() - hardirq_offset)
 		cpustat->irq = cputime64_add(cpustat->irq, tmp);
@@ -2409,22 +2670,39 @@ void account_steal_time(struct task_struct *p, cputime_t steal)
  * It also gets called by the fork code, when changing the parent's
  * timeslices.
  */
+
+/*维持当前最新的time_slice计数器*/
 void scheduler_tick(void)
 {
 	int cpu = smp_processor_id();
 	runqueue_t *rq = this_rq();
 	task_t *p = current;
 
+	/*
+	*	把转换为纳秒的TSC的当前值存入本地运行队列的timestamp_last_tick
+	*	这个时间戳是从函数sched_clock()获得
+	*/
 	rq->timestamp_last_tick = sched_clock();
 
+	/*检查当前进程是否是本地CPU的swapper进程*/
 	if (p == rq->idle) {
+		/*
+		*	本地除了swapper外,还有另外一个可运行的进程,
+		*	就设置当前进程的TIF_NEED_RESCHED,以强迫进行重新调度
+		*/
 		if (wake_priority_sleeper(rq))
 			goto out;
+		/*为了保持系统中运行队列的平衡,每次经过一次时钟节拍,调用该函数*/
 		rebalance_tick(cpu, rq, SCHED_IDLE);
 		return;
 	}
 
 	/* Task might have expired already, but not scheduled off yet */
+	/*
+	*	检查current->array是否指向本地运行队列的活动链表.
+	*	若不是,说明进程已经过期,但是还没有被替换
+	*	设置TIF_NEED_RESCHED标志,以强制进行重新调度
+	*/
 	if (p->array != rq->active) {
 		set_tsk_need_resched(p);
 		goto out;
@@ -2437,30 +2715,74 @@ void scheduler_tick(void)
 	 * timeslice. This makes it possible for interactive tasks
 	 * to use up their timeslices at their highest priority levels.
 	 */
+	 
+	 /*实时进程*/
 	if (rt_task(p)) {
 		/*
 		 * RR tasks need a special form of timeslice management.
 		 * FIFO tasks have no timeslices.
 		 */
+		 /*
+		 *	递减时间片计数器,并检查时间片是否被用完
+		 *	如果确定时间片确实用完了,执行一系列操作达到抢占当前进程的目的
+		 *	有必要的话，就尽快的抢占
+		*/
 		if ((p->policy == SCHED_RR) && !--p->time_slice) {
+			/*
+			*	重填进程的时间片计数器.
+			*	该函数检查进程的静态优先级,并根据公式返回相应的基本时间片
+			*/
 			p->time_slice = task_timeslice(p);
+			/*
+			*	first_time_slice清0,
+			*	该标志被fork()系统调用服务例程中的copy_process()设置
+			*	并在进程的第一个时间片刚一用完时立刻清0
+			*/
 			p->first_time_slice = 0;
+			/*
+			*	设置进程的TIF_NEED_RESCHED标志,
+			*	该标志强制调用schedule()函数,以便current指向的进程能被另外一个有相同优先级(更高)的实时进程所取代
+			*/
 			set_tsk_need_resched(p);
 
 			/* put it at the end of the queue: */
+			/*
+			*	把进程描述符移到与当前进程优先级相应的运行队列活动链表的尾部,
+			*	把current指向的进程放到链表的尾部,可以保证在每个优先级与它相同的可运行实时进程获得CPU时间片以前,
+			*	它不会再次被选择来执行.
+			*/
 			requeue_task(p, rq->active);
 		}
 		goto out_unlock;
 	}
+	
+	/*普通进程*/
+	/*递减时间片计数器,检查是否用完*/
 	if (!--p->time_slice) {
+		/*从可运行进程的this_rq()->active集合中删除current指向的进程*/
 		dequeue_task(p, rq->active);
+		/*设置进程的TIF_NEED_RESCHED标志*/
 		set_tsk_need_resched(p);
+		/*更新current指向的进程的动态优先级*/
 		p->prio = effective_prio(p);
+		/*重填进程的时间片*/
 		p->time_slice = task_timeslice(p);
 		p->first_time_slice = 0;
 
+		/*
+		*	若本地运行队列的expired_timestamp==0(过期进程集合为空)
+		*	把当前时钟节拍值赋给expired_timestamp
+		*/
 		if (!rq->expired_timestamp)
 			rq->expired_timestamp = jiffies;
+		/*
+		*	把当前进程插入活动进程集合或过期进程集合
+		*	若进程是交互式进程,TASK_INTERACTIVE产生1
+		*	EXPIRED_STARVING检查运行队列中的第一个过期进程的等待时间是否已经超过1000个时钟节拍乘以运行运行队列中的可运行进程数加1
+		*		若是,宏产生1
+		*	如果当前进程的静态优先级大于一个过期进程的静态优先级,
+		*	EXPIRED_STARVING也产生值1.
+		*/
 		if (!TASK_INTERACTIVE(p) || EXPIRED_STARVING(rq)) {
 			enqueue_task(p, rq->expired);
 			if (p->static_prio < rq->best_expired_prio)
@@ -2484,6 +2806,11 @@ void scheduler_tick(void)
 		 * This only applies to tasks in the interactive
 		 * delta range with at least TIMESLICE_GRANULARITY to requeue.
 		 */
+
+		/*
+		*	时间片没有用完,检查当前进程的剩余时间片是否太长
+		*	具有高静态优先级的交互式进程,其时间片被分成大小为TIMESLICE_GRANULARITY的几个片段
+		*/
 		if (TASK_INTERACTIVE(p) && !((task_timeslice(p) -
 			p->time_slice) % TIMESLICE_GRANULARITY(p)) &&
 			(p->time_slice >= TIMESLICE_GRANULARITY(p)) &&
@@ -2496,6 +2823,7 @@ void scheduler_tick(void)
 out_unlock:
 	spin_unlock(&rq->lock);
 out:
+	/*保证不同CPU的运行队列包含数量基本相同的可运行进程*/
 	rebalance_tick(cpu, rq, NOT_IDLE);
 }
 
@@ -2545,6 +2873,10 @@ static inline void wake_sleeping_dependent(int this_cpu, runqueue_t *this_rq)
 	 */
 }
 
+/*
+*	内核如果支持超线程技术
+*	检查要被选中执行的进程,其优先级是否比已经在相同物理CPU的某个逻辑CPU上运行的兄弟进程低
+*/
 static inline int dependent_sleeper(int this_cpu, runqueue_t *this_rq)
 {
 	struct sched_domain *sd = this_rq->sd;
@@ -2659,6 +2991,13 @@ EXPORT_SYMBOL(sub_preempt_count);
 /*
  * schedule() is the main scheduler function.
  */
+
+/*
+*	实现调度程序
+*	从运行队列的链表中找到一个进程,并随后将CPU分配给这个进程,
+*	schedule()可以由几个内核控制路径调用
+*	可以采用直接调用或延迟调用的方式
+*/
 asmlinkage void __sched schedule(void)
 {
 	long *switch_count;
@@ -2702,7 +3041,13 @@ need_resched_nonpreemptible:
 	}
 
 	schedstat_inc(rq, sched_cnt);
+	/*读取TSC*/
 	now = sched_clock();
+	/*
+	*	计算prev所用放入CPU时间片长度
+	*	通常要限制在1s的时间,
+	*	runtime的值用来限制进程对CPU的使用
+	*/
 	if (likely(now - prev->timestamp < NS_MAX_SLEEP_AVG))
 		run_time = now - prev->timestamp;
 	else
@@ -2712,16 +3057,34 @@ need_resched_nonpreemptible:
 	 * Tasks charged proportionately less run_time at high sleep_avg to
 	 * delay them losing their interactive status
 	 */
+
+	/*
+	*	鼓励进程具有较长的平均睡眠时间
+	*	CURRENT_BONUS返回0-10之间的值,它与进程的平均睡眠时间是成正比的
+	*/
 	run_time /= (CURRENT_BONUS(prev) ? : 1);
 
+	/*在开始寻找可运行队列之前,schedule()必须关掉本地中断,并获得所要保护的运行队列的自选锁*/
 	spin_lock_irq(&rq->lock);
 
+	/*确认prev是否是一个正在被终止的进程濉,检查PF_DEAD标志*/
 	if (unlikely(prev->flags & PF_DEAD))
 		prev->state = EXIT_DEAD;
 
 	switch_count = &prev->nivcsw;
+	
+	/*检查prev的状态,*/
+	/*
+	*	不是可运行状态---p->state != 0
+	*	它没有在内核态被抢占---PREEMPT_ACTIVE未被置位
+	*/
 	if (prev->state && !(preempt_count() & PREEMPT_ACTIVE)) {
 		switch_count = &prev->nvcsw;
+		/*
+		*	它是非阻塞挂起信号---signal_pending(prev)\
+		*	状态为TASK_INTERRUPTIBLE						 /状态设置为TASK_RUNNING,并将它插入运行队列
+		*	这个操作与把处理器分给prev是不同的,它只是给prev一次被选中的机会
+		*/
 		if (unlikely((prev->state & TASK_INTERRUPTIBLE) &&
 				unlikely(signal_pending(prev))))
 			prev->state = TASK_RUNNING;
@@ -2733,12 +3096,18 @@ need_resched_nonpreemptible:
 	}
 
 	cpu = smp_processor_id();
+	/*检查是否有可运行的进程*/
 	if (unlikely(!rq->nr_running)) {
 go_idle:
+		/*
+		*	没有可运行进程时,从另外一个运行队列迁移一些可运行进程
+		*	与load_balance()类似
+		*/
 		idle_balance(cpu, rq);
 		if (!rq->nr_running) {
 			next = rq->idle;
 			rq->expired_timestamp = 0;
+			/*idle_balance()失败,wake_sleeping_dependent()重新调度空闲CPU(即每个运行swapper进程的CPU)中的可运行进程*/
 			wake_sleeping_dependent(cpu, rq);
 			/*
 			 * wake_sleeping_dependent() might have released
@@ -2749,6 +3118,7 @@ go_idle:
 				goto switch_tasks;
 		}
 	} else {
+			/*有可运行进程*/
 		if (dependent_sleeper(cpu, rq)) {
 			next = rq->idle;
 			goto switch_tasks;
@@ -2762,12 +3132,18 @@ go_idle:
 			goto go_idle;
 	}
 
+	/*检查可运行进程中是否至少有一个进程是活动的,*/
 	array = rq->active;
+	/*没有*/
 	if (unlikely(!array->nr_active)) {
 		/*
 		 * Switch the active and expired arrays.
 		 */
 		schedstat_inc(rq, sched_switch);
+		/*
+		*	交换运行队列数据结构的active和expired字段
+		*	所有的过期进程变为活动进程，空集合接纳将要过期的进程
+		*/
 		rq->active = rq->expired;
 		rq->expired = array;
 		array = rq->active;
@@ -2776,13 +3152,23 @@ go_idle:
 	} else
 		schedstat_inc(rq, sched_noswitch);
 
+	/*搜索活动进程集合位掩码的第一个非0位*/
 	idx = sched_find_first_bit(array->bitmap);
 	queue = array->queue + idx;
+	/*存放将取代prev的进程描述符指针*/
 	next = list_entry(queue->next, task_t, run_list);
 
+	/*检查next->activated,表示进程在被唤醒时的状态*/
 	if (!rt_task(next) && next->activated > 0) {
 		unsigned long long delta = now - next->timestamp;
 
+		/*
+		*	把进程插入运行队列开始所经过的纳秒数加到进程的平均睡眠时间中
+		*	换言之,进程的睡眠时间被增加了,以包括进程在运行队列中等待CPU所消耗的时间
+		*	注意: 1---只增加等待时间的部分
+		*		      2---增加全部运行队列的等待时间
+		*		因为交互式进程更可能被异步事件而不是同步事件唤醒
+		*/
 		if (next->activated == 1)
 			delta = delta * (ON_RUNQUEUE_WEIGHT * 128 / 100) / 128;
 
@@ -2795,28 +3181,38 @@ go_idle:
 switch_tasks:
 	if (next == rq->idle)
 		schedstat_inc(rq, sched_goidle);
+	/*	改善了prefetch的性能,对于后续指令的的执行,数据是并行移动的*/
 	prefetch(next);
+	/*
+	*	替代prev之前,调度程序应该完成的管理工作,以防以延迟方式调用schedule()
+	*	
+	*/
 	clear_tsk_need_resched(prev);
 	rcu_qsctr_inc(task_cpu(prev));
 
+	/*减少prev的平均睡眠时间,并把它补充给进程所使用的CPU时间片*/
 	prev->sleep_avg -= run_time;
 	if ((long)prev->sleep_avg <= 0)
 		prev->sleep_avg = 0;
+	/*更新时间戳*/
 	prev->timestamp = prev->last_ran = now;
 
 	sched_info_switch(prev, next);
 	if (likely(prev != next)) {
+		/*发生进程切换*/
 		next->timestamp = now;
 		rq->nr_switches++;
 		rq->curr = next;
 		++*switch_count;
 
 		prepare_arch_switch(rq, next);
+		/*建立next的地址空间,*/
 		prev = context_switch(rq, prev, next);
+		/*代码优化屏障*/
 		barrier();
 
 		finish_task_switch(prev);
-	} else
+	} else		/*prev和next是同一个进程,当前运行队列中没有优先级较高或相等的其他活动进程*/
 		spin_unlock_irq(&rq->lock);
 
 	prev = current;
@@ -3007,6 +3403,7 @@ void fastcall __wake_up_sync(wait_queue_head_t *q, unsigned int mode, int nr_exc
 }
 EXPORT_SYMBOL_GPL(__wake_up_sync);	/* For internal use only */
 
+/*与up()相对应*/
 void fastcall complete(struct completion *x)
 {
 	unsigned long flags;
@@ -3031,6 +3428,7 @@ void fastcall complete_all(struct completion *x)
 }
 EXPORT_SYMBOL(complete_all);
 
+/*与down()相对应*/
 void fastcall __sched wait_for_completion(struct completion *x)
 {
 	might_sleep();
@@ -3040,6 +3438,10 @@ void fastcall __sched wait_for_completion(struct completion *x)
 
 		wait.flags |= WQ_FLAG_EXCLUSIVE;
 		__add_wait_queue_tail(&x->wait, &wait);
+		/*
+		*	done >0 终止,说明complete()已经在另外一个CPU运行
+		*	否则将current作为互斥队列加入到等待队列末尾
+		*/
 		do {
 			__set_current_state(TASK_UNINTERRUPTIBLE);
 			spin_unlock_irq(&x->wait.lock);
@@ -3265,6 +3667,7 @@ void set_user_nice(task_t *p, long nice)
 		 * lowered its priority, then reschedule its CPU:
 		 */
 		if (delta < 0 || (delta > 0 && task_running(rq, p)))
+			/*允许其他进程抢占current进程*/
 			resched_task(rq->curr);
 	}
 out_unlock:
@@ -3282,6 +3685,12 @@ EXPORT_SYMBOL(set_user_nice);
  * sys_setpriority is a more generic, but much slower function that
  * does similar things.
  */
+
+/*
+*	只影响调用它的进程
+*	increment中的参数用来修改进程描述符的nice字段
+*	负值相当于请求优先级增加,并请求超级用户特权,其正值相当于请求优先级减少
+*/
 asmlinkage long sys_nice(int increment)
 {
 	int retval;
@@ -3293,6 +3702,7 @@ asmlinkage long sys_nice(int increment)
 	 * and we have a single winner.
 	 */
 	if (increment < 0) {
+		/*负增长时,核实进程是否有CAP_SYS_NICE权能*/
 		if (!capable(CAP_SYS_NICE))
 			return -EPERM;
 		if (increment < -40)
@@ -3311,6 +3721,7 @@ asmlinkage long sys_nice(int increment)
 	if (retval)
 		return retval;
 
+	/*获得本地运行队列锁,更新current进程的静态优先级*/
 	set_user_nice(current, nice);
 	return 0;
 }
@@ -3539,6 +3950,11 @@ out_nounlock:
  * @pid: the pid in question.
  * @param: structure containing the RT priority.
  */
+ 
+/*
+*	为pid所表示的进程检索参数
+*	pid==0,当前进程被检索
+*/
 asmlinkage long sys_sched_getparam(pid_t pid, struct sched_param __user *param)
 {
 	struct sched_param lp;
@@ -3574,6 +3990,9 @@ out_unlock:
 	return retval;
 }
 
+/*
+*	设置CPU进程亲和力掩码,也就是允许执行进程的CPU的位掩码
+*/
 long sched_setaffinity(pid_t pid, cpumask_t new_mask)
 {
 	task_t *p;
@@ -3655,6 +4074,9 @@ cpumask_t cpu_online_map = CPU_MASK_ALL;
 cpumask_t cpu_possible_map = CPU_MASK_ALL;
 #endif
 
+/*
+*	返回CPU进程亲和力掩码也就是允许执行进程的CPU的位掩码
+*/
 long sched_getaffinity(pid_t pid, cpumask_t *mask)
 {
 	int retval;
@@ -3712,6 +4134,13 @@ asmlinkage long sys_sched_getaffinity(pid_t pid, unsigned int len,
  * to the expired array. If there are no other threads running on this
  * CPU then this function will return.
  */
+
+/*
+*	允许进程在不被挂起的情况下资源放弃CPU,进程仍然处于TASK_RUNNING状态
+*	但调度程序把它放在运行队列的过期进程集合中(普通进程),或放在运行队列链表末尾(实时进程)
+*	具有相同动态优先级的其他进程将有机会运行
+*	主要由SCHED_FIFO使用
+*/
 asmlinkage long sys_sched_yield(void)
 {
 	runqueue_t *rq = this_rq_lock();
@@ -3874,12 +4303,17 @@ long __sched io_schedule_timeout(long timeout)
  * this syscall returns the maximum rt_priority that can be used
  * by a given scheduling class.
  */
+
+/*
+*	返回最大实时静态优先级,由policy参数标识的调度策略来使用
+*/
 asmlinkage long sys_sched_get_priority_max(int policy)
 {
 	int ret = -EINVAL;
 
 	switch (policy) {
 	case SCHED_FIFO:
+	/*实时进程,返回99*/
 	case SCHED_RR:
 		ret = MAX_USER_RT_PRIO-1;
 		break;
@@ -3897,12 +4331,17 @@ asmlinkage long sys_sched_get_priority_max(int policy)
  * this syscall returns the minimum rt_priority that can be used
  * by a given scheduling class.
  */
+
+/*
+*	返回最小实时静态优先级,由policy参数标识的调度策略来使用
+*/
 asmlinkage long sys_sched_get_priority_min(int policy)
 {
 	int ret = -EINVAL;
 
 	switch (policy) {
 	case SCHED_FIFO:
+	/*实时进程,返回0*/
 	case SCHED_RR:
 		ret = 1;
 		break;
@@ -3920,6 +4359,11 @@ asmlinkage long sys_sched_get_priority_min(int policy)
  * this syscall writes the default timeslice value of a given process
  * into the user-space timespec buffer. A value of '0' means infinity.
  */
+
+/*
+*	把参数pid表示的实时进程的轮转时间片写入用户态地址空间的一个结构中.
+*	pid==0,写当前进程时间片
+*/
 asmlinkage
 long sys_sched_rr_get_interval(pid_t pid, struct timespec __user *interval)
 {
@@ -4694,6 +5138,9 @@ extern void __devinit arch_init_sched_domains(void);
 extern void __devinit arch_destroy_sched_domains(void);
 #else
 #ifdef CONFIG_SCHED_SMT
+/*	
+*	支持超线程技术---底层调度域存放在PER_CPU变量cpu_domains中
+*/
 static DEFINE_PER_CPU(struct sched_domain, cpu_domains);
 static struct sched_group sched_group_cpus[NR_CPUS];
 static int __devinit cpu_to_cpu_group(int cpu)

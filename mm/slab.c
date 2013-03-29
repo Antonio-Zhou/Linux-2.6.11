@@ -301,17 +301,17 @@ struct kmem_list3 {
 	
 struct kmem_cache_s {
 /* 1) per-cpu data, touched during every alloc/free */
-	struct array_cache	*array[NR_CPUS];
-	unsigned int		batchcount;
-	unsigned int		limit;
+	struct array_cache	*array[NR_CPUS];	/*per CPU指针数组指向包含空闲对象的本地高速缓存*/
+	unsigned int		batchcount;		/**/
+	unsigned int		limit;			/**/
 /* 2) touched by every alloc & free from the backend */
-	struct kmem_list3	lists;
+	struct kmem_list3	lists;		
 	/* NUMA: kmem_3list_t	*nodelists[MAX_NUMNODES] */
-	unsigned int		objsize;
-	unsigned int	 	flags;	/* constant flags */
-	unsigned int		num;	/* # of objs per slab */
-	unsigned int		free_limit; /* upper limit of objects in the lists */
-	spinlock_t		spinlock;
+	unsigned int		objsize;			/**/
+	unsigned int	 	flags;	/* constant flags */			/**/
+	unsigned int		num;	/* # of objs per slab */			/**/
+	unsigned int		free_limit; /* upper limit of objects in the lists */		/**/
+	spinlock_t		spinlock;		/**/
 
 /* 3) cache_grow/shrink */
 	/* order of pgs per slab (2^n) */
@@ -504,6 +504,10 @@ static int slab_break_gfp_order = BREAK_GFP_ORDER_LO;
 #define	GET_PAGE_SLAB(pg)     ((struct slab *)(pg)->lru.prev)
 
 /* These are the default caches for kmalloc. Custom caches can have other sizes. */
+/*
+*	分别指向26个高速缓存描述符,与其相关的内存区大小为2^5--2^17字节
+*	每种大小都有两个高速缓存:一个适用于ISA DMA分配,另一个用于常规分配
+*/
 struct cache_sizes malloc_sizes[] = {
 #define CACHE(x) { .cs_size = (x) },
 #include <linux/kmalloc_sizes.h>
@@ -532,6 +536,7 @@ static struct arraycache_init initarray_generic =
 	{ { 0, BOOT_CPUCACHE_ENTRIES, 1, 0} };
 
 /* internal cache of cache description objs */
+/*包含第一个高速缓存的描述符*/
 static kmem_cache_t cache_cache = {
 	.lists		= LIST3_INIT(cache_cache.lists),
 	.batchcount	= 1,
@@ -886,6 +891,15 @@ __initcall(cpucache_init);
  * did not request dmaable memory, we might get it, but that
  * would be relatively rare and ignorable.
  */
+ 
+ /*
+*	当slab分配器创建新的slab时,它依靠分区页框分配器来获得一组连续的空闲页框
+*	参数:kmem_cache_t *cachep---指向需要额外页框的高速缓存的高速缓存描述符
+*								请求页框的个数由存放在cachep->gfporder字段中的order决定
+*		     int flags---说明如何请求页框,
+*					这组标志与存放在高速缓存描述符的gfpflags字段中的专用高速缓存分配标志相结合
+*		     int nodeid
+*/
 static void *kmem_getpages(kmem_cache_t *cachep, int flags, int nodeid)
 {
 	struct page *page;
@@ -916,6 +930,11 @@ static void *kmem_getpages(kmem_cache_t *cachep, int flags, int nodeid)
 /*
  * Interface to system's page release.
  */
+
+/*
+*	释放分配给slab的页框
+*	从线性地址addr开始释放页框
+*/
 static void kmem_freepages(kmem_cache_t *cachep, void *addr)
 {
 	unsigned long i = (1<<cachep->gfporder);
@@ -928,6 +947,7 @@ static void kmem_freepages(kmem_cache_t *cachep, void *addr)
 		page++;
 	}
 	sub_page_state(nr_slab, nr_freed);
+	/*当前进程正在执行内存回收*/
 	if (current->reclaim_state)
 		current->reclaim_state->reclaimed_slab += nr_freed;
 	free_pages((unsigned long)addr, cachep->gfporder);
@@ -1096,6 +1116,12 @@ static void check_poison_obj(kmem_cache_t *cachep, void *objp)
  * Before calling the slab must have been unlinked from the cache.
  * The cache-lock is not held/needed.
  */
+
+/*
+*	撤销slab,并释放相应的页框到分区页框分配器
+*	条件:1.slab高速缓存中有太多的空闲对象
+*		     2.被周期性调用的定时器函数确定是否有完全未使用的slab能被释放
+*/
 static void slab_destroy (kmem_cache_t *cachep, struct slab *slabp)
 {
 	void *addr = slabp->s_mem - slabp->colouroff;
@@ -1127,9 +1153,11 @@ static void slab_destroy (kmem_cache_t *cachep, struct slab *slabp)
 			(cachep->dtor)(objp+obj_dbghead(cachep), cachep, 0);
 	}
 #else
+	/*检查高速缓存是否为它的对象提供了析构方法*/
 	if (cachep->dtor) {
 		int i;
 		for (i = 0; i < cachep->num; i++) {
+			/*objp记录当前已检查的对象*/
 			void* objp = slabp->s_mem+cachep->objsize*i;
 			(cachep->dtor)(objp, cachep, 0);
 		}
@@ -1142,8 +1170,10 @@ static void slab_destroy (kmem_cache_t *cachep, struct slab *slabp)
 		slab_rcu = (struct slab_rcu *) slabp;
 		slab_rcu->cachep = cachep;
 		slab_rcu->addr = addr;
+		/*注册一个回调函数来延期释放slab*/
 		call_rcu(&slab_rcu->head, kmem_rcu_free);
 	} else {
+		/*把slab使用的所有连续页框返回给伙伴系统*/
 		kmem_freepages(cachep, addr);
 		if (OFF_SLAB(cachep))
 			kmem_cache_free(cachep->slabp_cache, slabp);
@@ -1183,6 +1213,10 @@ static void slab_destroy (kmem_cache_t *cachep, struct slab *slabp)
  * cacheline.  This can be beneficial if you're counting cycles as closely
  * as davem.
  */
+
+/*
+*	专用高速缓存的创建
+*/
 kmem_cache_t *
 kmem_cache_create (const char *name, size_t size, size_t align,
 	unsigned long flags, void (*ctor)(void*, kmem_cache_t *, unsigned long),
@@ -1220,6 +1254,7 @@ kmem_cache_create (const char *name, size_t size, size_t align,
 	 * above the next power of two: caches with object sizes just above a
 	 * power of two have a significant amount of internal fragmentation.
 	 */
+	 /*根据BYTES_PER_WORD指定的大小来对齐对象*/
 	if ((size < 4096 || fls(size-1) == fls(size-1+3*BYTES_PER_WORD)))
 		flags |= SLAB_RED_ZONE|SLAB_STORE_USER;
 	if (!(flags & SLAB_DESTROY_BY_RCU))
@@ -1626,6 +1661,10 @@ EXPORT_SYMBOL(kmem_cache_shrink);
  * The caller must guarantee that noone will allocate memory from the cache
  * during the kmem_cache_destroy().
  */
+
+/*
+*	撤销一个高速缓存并将它从cache_chain链表上删除
+*/
 int kmem_cache_destroy (kmem_cache_t * cachep)
 {
 	int i;
@@ -1675,6 +1714,10 @@ int kmem_cache_destroy (kmem_cache_t * cachep)
 EXPORT_SYMBOL(kmem_cache_destroy);
 
 /* Get the memory for a slab management obj. */
+
+/*
+*	获得一个新的slab描述符
+*/
 static struct slab* alloc_slabmgmt (kmem_cache_t *cachep,
 			void *objp, int colour_off, int local_flags)
 {
@@ -1777,6 +1820,12 @@ static void set_slab_attr(kmem_cache_t *cachep, struct slab *slabp, void *objp)
  * Grow (by 1) the number of slabs within a cache.  This is called by
  * kmem_cache_alloc() when there are no active objs left in a cache.
  */
+
+/*
+*	给高速缓存分配一个新的slab
+*	条件:1.已发出一个分配新对象的请求
+*		     2.高速缓存不包括任何空闲对象
+*/
 static int cache_grow (kmem_cache_t * cachep, int flags, int nodeid)
 {
 	struct slab	*slabp;
@@ -1837,6 +1886,7 @@ static int cache_grow (kmem_cache_t * cachep, int flags, int nodeid)
 
 	set_slab_attr(cachep, slabp, objp);
 
+	/*构造方法应用到新slab包含的所有对象上*/
 	cache_init_objs(cachep, slabp, ctor_flags);
 
 	if (local_flags & __GFP_WAIT)
@@ -1845,6 +1895,10 @@ static int cache_grow (kmem_cache_t * cachep, int flags, int nodeid)
 	spin_lock(&cachep->spinlock);
 
 	/* Make slab active. */
+	/*
+	*	将新得到的slab描述符添加到高速缓存描述符*cachep的全空slab链表的末端
+	*	并更新高速缓存中的空闲对象计数器
+	*/
 	list_add_tail(&slabp->list, &(list3_data(cachep)->slabs_free));
 	STATS_INC_GROWN(cachep);
 	list3_data(cachep)->free_objects += cachep->num;
@@ -1980,6 +2034,9 @@ bad:
 #define check_slabp(x,y) do { } while(0)
 #endif
 
+/*
+*	重新填充本地高速缓存并获得一个空闲对象
+*/
 static void* cache_alloc_refill(kmem_cache_t* cachep, int flags)
 {
 	int batchcount;
@@ -1987,6 +2044,7 @@ static void* cache_alloc_refill(kmem_cache_t* cachep, int flags)
 	struct array_cache *ac;
 
 	check_irq_off();
+	/*将本地高速缓存描述符的地址存放在ac局部变量中*/
 	ac = ac_data(cachep);
 retry:
 	batchcount = ac->batchcount;
@@ -2001,8 +2059,10 @@ retry:
 
 	BUG_ON(ac->avail > 0);
 	spin_lock(&cachep->spinlock);
+	/*slab高速缓存包含共享本地高速缓存*/
 	if (l3->shared) {
 		struct array_cache *shared_array = l3->shared;
+		/*该共享本地高速缓存包含一些空闲对象*/
 		if (shared_array->avail) {
 			if (batchcount > shared_array->avail)
 				batchcount = shared_array->avail;
@@ -2014,10 +2074,12 @@ retry:
 			goto alloc_done;
 		}
 	}
+	/*试图填充本地高速缓存,填充值为高速缓存的slab中包含的多达ac->batchount个空闲对象的指针*/
 	while (batchcount > 0) {
 		struct list_head *entry;
 		struct slab *slabp;
 		/* Get slab alloc is to come from. */
+		/*查看高速缓存描述符的slabs->partial和slabs_free链表*/
 		entry = l3->slabs_partial.next;
 		if (entry == &l3->slabs_partial) {
 			l3->free_touched = 1;
@@ -2025,7 +2087,8 @@ retry:
 			if (entry == &l3->slabs_free)
 				goto must_grow;
 		}
-
+		
+		/*获得slabp的地址*/
 		slabp = list_entry(entry, struct slab, list);
 		check_slabp(cachep, slabp);
 		check_spinlock_acquired(cachep);
@@ -2036,6 +2099,10 @@ retry:
 			STATS_SET_HIGH(cachep);
 
 			/* get obj pointer */
+			/*
+			*	对于slab中的每个空闲对象,函数增加slab描述符的inuse.
+			*	将对象的地址插入本地高速缓存,并更新free字段使得它存放了slab中下一个空闲对象的下标
+			*/
 			ac_entry(ac)[ac->avail++] = slabp->s_mem + slabp->free*cachep->objsize;
 
 			slabp->inuse++;
@@ -2056,12 +2123,18 @@ retry:
 	}
 
 must_grow:
+	/*
+	*	被加到本地高速缓存上的指针个数被存放在ac->avail:
+	*	函数递减同样数量的kmem_list3结构的free_objects字段来说明这些对象不再空闲
+	*/
 	l3->free_objects -= ac->avail;
 alloc_done:
 	spin_unlock(&cachep->spinlock);
 
+	/*ac->avail >0 说明一些高速缓存再填充的情况发生了*/
 	if (unlikely(!ac->avail)) {
 		int x;
+		/*获得一个新slab,从而获得新的空闲对象*/
 		x = cache_grow(cachep, flags, -1);
 		
 		// cache_grow can reenable interrupts, then ac could change.
@@ -2073,6 +2146,7 @@ alloc_done:
 			goto retry;
 	}
 	ac->touched = 1;
+	/*返回最后插入到本地高速缓存的空闲对象指针*/
 	return ac_entry(ac)[--ac->avail];
 }
 
@@ -2131,7 +2205,6 @@ cache_alloc_debugcheck_after(kmem_cache_t *cachep,
 #define cache_alloc_debugcheck_after(a,b,objp,d) (objp)
 #endif
 
-
 static inline void * __cache_alloc (kmem_cache_t *cachep, int flags)
 {
 	unsigned long save_flags;
@@ -2142,12 +2215,18 @@ static inline void * __cache_alloc (kmem_cache_t *cachep, int flags)
 
 	local_irq_save(save_flags);
 	ac = ac_data(cachep);
+	/*
+	*	试图从本地高速缓存获得一个空闲对象
+	*	avail包含指向最后被释放的对象的项在本地高速缓存中的下标
+	*/
 	if (likely(ac->avail)) {
 		STATS_INC_ALLOCHIT(cachep);
 		ac->touched = 1;
+		/*获得那个空闲对象的地址,并递减ac->avail*/
 		objp = ac_entry(ac)[--ac->avail];
 	} else {
 		STATS_INC_ALLOCMISS(cachep);
+		/*没有空闲对象时,重新填充本地高速缓存并获得一个空闲对象*/
 		objp = cache_alloc_refill(cachep, flags);
 	}
 	local_irq_restore(save_flags);
@@ -2167,6 +2246,7 @@ static void free_block(kmem_cache_t *cachep, void **objpp, int nr_objects)
 	check_spinlock_acquired(cachep);
 
 	/* NUMA: move add into loop */
+	/*增加高速缓存描述符的lists.free_objects*/
 	cachep->lists.free_objects += nr_objects;
 
 	for (i = 0; i < nr_objects; i++) {
@@ -2174,8 +2254,14 @@ static void free_block(kmem_cache_t *cachep, void **objpp, int nr_objects)
 		struct slab *slabp;
 		unsigned int objnr;
 
+		/*
+		*	确定包含对象的slab描述符的地址
+		*	slab页描述符的lru.prev字段指向相应的slab描述符
+		*/
 		slabp = GET_PAGE_SLAB(virt_to_page(objp));
+		/*从它的高速缓存链表(cachep->lists.slabs_partial或是cachep->lists.slabs_full上删除slab描述符)*/
 		list_del(&slabp->list);
+		/*计算slab内对象的下标*/
 		objnr = (objp - slabp->s_mem) / cachep->objsize;
 		check_slabp(cachep, slabp);
 #if DEBUG
@@ -2185,6 +2271,10 @@ static void free_block(kmem_cache_t *cachep, void **objpp, int nr_objects)
 			BUG();
 		}
 #endif
+		/*
+		*	将slabp->free的当前值存放在对象描述符中,并将对象的下标放入slabp->free
+		*	最后被释放的对象将再次成为首次被分配的对象
+		*/
 		slab_bufctl(slabp)[objnr] = slabp->free;
 		slabp->free = objnr;
 		STATS_DEC_ACTIVE(cachep);
@@ -2192,11 +2282,15 @@ static void free_block(kmem_cache_t *cachep, void **objpp, int nr_objects)
 		check_slabp(cachep, slabp);
 
 		/* fixup slab chains */
+		/*slab中所有对象空闲*/
 		if (slabp->inuse == 0) {
+			/*整个高速缓存中空闲对象的个数(lists.free_objects)>限制的个数(free_limit)*/
 			if (cachep->lists.free_objects > cachep->free_limit) {
 				cachep->lists.free_objects -= cachep->num;
+				/*将slab页框释放到分区页框分配器*/
 				slab_destroy(cachep, slabp);
 			} else {
+				/*将slab描述符插入到slabs_free链表中*/
 				list_add(&slabp->list,
 				&list3_data_ptr(cachep, objp)->slabs_free);
 			}
@@ -2205,12 +2299,17 @@ static void free_block(kmem_cache_t *cachep, void **objpp, int nr_objects)
 			 * partial list on free - maximum time for the
 			 * other objects to be freed, too.
 			 */
+			 
+			 /*inuse > 0,slab被部分填充,将slab描述符插入到slabs_partial中*/
 			list_add_tail(&slabp->list,
 				&list3_data_ptr(cachep, objp)->slabs_partial);
 		}
 	}
 }
 
+/*
+*	清空本地高速缓存
+*/
 static void cache_flusharray (kmem_cache_t* cachep, struct array_cache *ac)
 {
 	int batchcount;
@@ -2221,12 +2320,15 @@ static void cache_flusharray (kmem_cache_t* cachep, struct array_cache *ac)
 #endif
 	check_irq_off();
 	spin_lock(&cachep->spinlock);
+	/*slab高速缓存包含一个共享本地高速缓存*/
 	if (cachep->lists.shared) {
 		struct array_cache *shared_array = cachep->lists.shared;
 		int max = shared_array->limit-shared_array->avail;
+		/*该共享本地高速缓存还没有满*/
 		if (max) {
 			if (batchcount > max)
 				batchcount = max;
+			/*从CPU的本地高速缓存上移ac->batchcount个指针来填充共享本地高速缓存*/
 			memcpy(&ac_entry(shared_array)[shared_array->avail],
 					&ac_entry(ac)[0],
 					sizeof(void*)*batchcount);
@@ -2235,6 +2337,7 @@ static void cache_flusharray (kmem_cache_t* cachep, struct array_cache *ac)
 		}
 	}
 
+	/*将当前包含在本地高速缓存中的ac->batchcount个对象归还给slab分配器*/
 	free_block(cachep, &ac_entry(ac)[0], batchcount);
 free_done:
 #if STATS
@@ -2256,6 +2359,7 @@ free_done:
 	}
 #endif
 	spin_unlock(&cachep->spinlock);
+	/*通过*/
 	ac->avail -= batchcount;
 	memmove(&ac_entry(ac)[0], &ac_entry(ac)[batchcount],
 			sizeof(void*)*ac->avail);
@@ -2275,12 +2379,15 @@ static inline void __cache_free (kmem_cache_t *cachep, void* objp)
 	check_irq_off();
 	objp = cache_free_debugcheck(cachep, objp, __builtin_return_address(0));
 
+	/*检查本地高速缓存是否有空间给指向一个空闲对象的额外指针.*/
 	if (likely(ac->avail < ac->limit)) {
 		STATS_INC_FREEHIT(cachep);
+		/*如果有,该指针被加到本地高速缓存*/
 		ac_entry(ac)[ac->avail++] = objp;
 		return;
 	} else {
 		STATS_INC_FREEMISS(cachep);
+		/*清空本地高速缓存*/
 		cache_flusharray(cachep, ac);
 		ac_entry(ac)[ac->avail++] = objp;
 	}
@@ -2294,6 +2401,10 @@ static inline void __cache_free (kmem_cache_t *cachep, void* objp)
  * Allocate an object from this cache.  The flags are only relevant
  * if the cache has no available objects.
  */
+
+/*
+*	可以获得新对象
+*/
 void * kmem_cache_alloc (kmem_cache_t *cachep, int flags)
 {
 	return __cache_alloc(cachep, flags);
@@ -2526,6 +2637,12 @@ EXPORT_SYMBOL(__alloc_percpu);
  * Free an object which was previously allocated from this
  * cache.
  */
+
+/*
+*	释放一个曾经由slab分配器分配给某个内核函数的对象
+*	参数:kmem_cache_t *cachep---高速缓存描述符的地址
+*		     void *objp---将被释放对象的地址
+*/
 void kmem_cache_free (kmem_cache_t *cachep, void *objp)
 {
 	unsigned long flags;

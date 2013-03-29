@@ -30,6 +30,7 @@ static void delay_none(unsigned long loops)
 }
 
 /* none timer_opts struct */
+/*	timer_none是一个虚拟的定时器资源对象，内核在初始化时使用它*/
 struct timer_opts timer_none = {
 	.name = 	"none",
 	.mark_offset =	mark_offset_none, 

@@ -61,10 +61,18 @@ EXPORT_SYMBOL(nr_swap_pages);
  * Used by page_zone() to look up the address of the struct zone whose
  * id is encoded in the upper bits of page->flags
  */
+
+/*
+*	启动时,所有内存节点的所有管理区描述符的地址初始化这个数组
+*/
 struct zone *zone_table[1 << (ZONES_SHIFT + NODES_SHIFT)];
 EXPORT_SYMBOL(zone_table);
 
 static char *zone_names[MAX_NR_ZONES] = { "DMA", "Normal", "HighMem" };
+/*
+*	保留内存的数量
+*	在内核初始化时设置,取决于包含在ZONE_DMA和ZONE_NORMAL内存管理区内的页框数
+*/
 int min_free_kbytes = 1024;
 
 unsigned long __initdata nr_kernel_pages;
@@ -199,8 +207,19 @@ static inline void rmv_page_order(struct page *page)
  * for recording page's order, we use page->private and PG_private.
  *
  */
+
+/*
+*	检查buddy是否描述了大小为order_size的空闲页框块的第一个页
+*/
 static inline int page_is_buddy(struct page *page, int order)
 {
+	/*
+	*	从上到下,四个条件:
+	*		peivate字段必须是有意义的(PG_private置位)
+	*		private字段必须存放将要被释放的块的order
+	*		属于动态内存(PG_reserved位清0)
+	*		第一个页必须是空闲(_count == -1)
+	*/	
        if (PagePrivate(page)           &&
            (page_order(page) == order) &&
            !PageReserved(page)         &&
@@ -233,11 +252,22 @@ static inline int page_is_buddy(struct page *page, int order)
  * -- wli
  */
 
+/*
+*	按照伙伴系统的策略释放页框
+*	参数:struct page *page---被释放块中所包含的第一个页框描述符的地址
+*		     struct zone *zone---管理区描述符的地址
+*		     unsigned int order---块大小的对数
+*/
 static inline void __free_pages_bulk (struct page *page, struct page *base,
 		struct zone *zone, unsigned int order)
 {
+	/*
+	*	包含块中第一个页框的下标,
+	*	这是相对于管理区中的第一个页框而言的
+	*/
 	unsigned long page_idx;
 	struct page *coalesced;
+	/*增加管理区中空闲页框的计数器*/
 	int order_size = 1 << order;
 
 	if (unlikely(order))
@@ -249,15 +279,30 @@ static inline void __free_pages_bulk (struct page *page, struct page *base,
 	BUG_ON(bad_range(zone, page));
 
 	zone->free_pages += order_size;
+	/*
+	*	最多循环(10-order)次,每次都尽量把一个块和它的伙伴进行合并
+	*	从最小的块开始,向上移动到顶部
+	*/
 	while (order < MAX_ORDER-1) {
 		struct free_area *area;
 		struct page *buddy;
 		int buddy_idx;
 
+		/*
+		*	获取伙伴块的下标
+		*	使用^(1 << order)转换page_idx第order位
+		*	这个位原先是0,buddy_idx==page_idx+order_size
+		*	这个位原先是1,buddy_idx==page_idx-order_size
+		*/
 		buddy_idx = (page_idx ^ (1 << order));
+		/*获得伙伴块的页描述符*/
 		buddy = base + buddy_idx;
 		if (bad_range(zone, buddy))
 			break;
+		/*
+		*	检查buddy是否描述了大小为order_size的空闲页框块的第一个页
+		*	没有满足条件,跳出循环,因为获得的空闲块不能再和其他空闲块合并
+		*/
 		if (!page_is_buddy(buddy, order))
 			break;
 		/* Move the buddy up one level. */
@@ -268,6 +313,7 @@ static inline void __free_pages_bulk (struct page *page, struct page *base,
 		page_idx &= buddy_idx;
 		order++;
 	}
+	/*将它插入适当的链表并以块大小的order更新第一个页框的private*/
 	coalesced = base + page_idx;
 	set_page_order(coalesced, order);
 	list_add(&coalesced->lru, &zone->free_area[order].free_list);
@@ -346,6 +392,7 @@ void __free_pages_ok(struct page *page, unsigned int order)
 		free_pages_check(__FUNCTION__, page + i);
 	list_add(&page->lru, &list);
 	kernel_map_pages(page, 1<<order, 0);
+	/*把它们释放到适当内存管理区的伙伴系统中*/
 	free_pages_bulk(page_zone(page), 1, &list, order);
 }
 
@@ -375,6 +422,7 @@ expand(struct zone *zone, struct page *page,
 		high--;
 		size >>= 1;
 		BUG_ON(bad_range(zone, &page[size]));
+		/*插入伙伴,作为链表中第一个元素*/
 		list_add(&page[size].lru, &area->free_list);
 		area->nr_free++;
 		set_page_order(&page[size], high);
@@ -402,6 +450,10 @@ void set_page_refs(struct page *page, int order)
 /*
  * This page is about to be returned from the page allocator
  */
+
+/*
+*	初始化页框的页描述符
+*/
 static void prep_new_page(struct page *page, int order)
 {
 	if (page->mapping || page_mapped(page) ||
@@ -428,22 +480,36 @@ static void prep_new_page(struct page *page, int order)
  * Do the hard work of removing an element from the buddy allocator.
  * Call me with the zone->lock already held.
  */
+
+/*
+*	用来在管理区中找到一个空闲块
+*	参数:struct zone *zone---管理区描述符地址
+*		     unsigned int order---请求的空闲块大小的数值(0---一个单页块,1---一个两页块,类推)
+*	成功则返回第一个分配页框的也描述符,否则为NULL
+*/ 
 static struct page *__rmqueue(struct zone *zone, unsigned int order)
 {
 	struct free_area * area;
 	unsigned int current_order;
 	struct page *page;
 
+	/*扫描每个可用块链表,进行循环搜索*/
 	for (current_order = order; current_order < MAX_ORDER; ++current_order) {
 		area = zone->free_area + current_order;
 		if (list_empty(&area->free_list))
 			continue;
 
+		/*
+		*	找到了一块合适的空闲块,
+		*	删除它的第一个页框描述符
+		*	减少管理区描述符中的free_page的值
+		*/
 		page = list_entry(area->free_list.next, struct page, lru);
 		list_del(&page->lru);
 		rmv_page_order(page);
 		area->nr_free--;
 		zone->free_pages -= 1UL << order;
+		/*current_order > order*/
 		return expand(zone, page, order, current_order, area);
 	}
 
@@ -464,11 +530,13 @@ static int rmqueue_bulk(struct zone *zone, unsigned int order,
 	struct page *page;
 	
 	spin_lock_irqsave(&zone->lock, flags);
+	/*通过反复调用__rmqueue()从伙伴系统中分配bantch个单一页框*/
 	for (i = 0; i < count; ++i) {
 		page = __rmqueue(zone, order);
 		if (page == NULL)
 			break;
 		allocated++;
+		/*插入高速缓存链表*/
 		list_add_tail(&page->lru, list);
 	}
 	spin_unlock_irqrestore(&zone->lock, flags);
@@ -566,6 +634,10 @@ static void zone_statistics(struct zonelist *zonelist, struct zone *z)
  * Free a 0-order page
  */
 static void FASTCALL(free_hot_cold_page(struct page *page, int cold));
+
+/*
+*	释放单个页框到per CPU页框高速缓存
+*/
 static void fastcall free_hot_cold_page(struct page *page, int cold)
 {
 	struct zone *zone = page_zone(page);
@@ -613,6 +685,14 @@ static inline void prep_zero_page(struct page *page, int order, int gfp_flags)
  * we cheat by calling it from here, in the order > 0 path.  Saves a branch
  * or two.
  */
+
+/*
+*	在指定的内存管理区中分配页框
+*	使用per CPU 页框高速缓存来处理单一页框请求
+*	参数:struct zone *zone---内存管理区描述符的地址
+*		     int order---请求分配的内存大小的对数
+*		     int gfp_flags---分配标志(只对单一页框请求有意义)
+*/
 static struct page *
 buffered_rmqueue(struct zone *zone, int order, int gfp_flags)
 {
@@ -625,9 +705,12 @@ buffered_rmqueue(struct zone *zone, int order, int gfp_flags)
 
 		pcp = &zone->pageset[get_cpu()].pcp[cold];
 		local_irq_save(flags);
+		/*检查由__GFP_COLD标志标识内存管理区本地per CPU告诉缓存是否需要补充*/
 		if (pcp->count <= pcp->low)
+			/*给count增加实际被分配页框的个数来更新它*/
 			pcp->count += rmqueue_bulk(zone, 0,
 						pcp->batch, &pcp->list);
+		/*count > 0,从高速缓存链表获得一个页框,*/
 		if (pcp->count) {
 			page = list_entry(pcp->list.next, struct page, lru);
 			list_del(&page->lru);
@@ -637,8 +720,10 @@ buffered_rmqueue(struct zone *zone, int order, int gfp_flags)
 		put_cpu();
 	}
 
+	/*内存请求没有满足,或是因为请求跨越了几个连续页框,或是因为被选中的页框高速缓存为空*/
 	if (page == NULL) {
 		spin_lock_irqsave(&zone->lock, flags);
+		/*从伙伴系统中分配所请求的页框*/
 		page = __rmqueue(zone, order);
 		spin_unlock_irqrestore(&zone->lock, flags);
 	}
@@ -646,8 +731,10 @@ buffered_rmqueue(struct zone *zone, int order, int gfp_flags)
 	if (page != NULL) {
 		BUG_ON(bad_range(zone, page));
 		mod_page_state_zone(zone, pgalloc, 1 << order);
+		/*初始化页框的页描述符*/
 		prep_new_page(page, order);
 
+		/*__GFP_ZERO被置位,将内存区域填充0*/
 		if (gfp_flags & __GFP_ZERO)
 			prep_zero_page(page, order, gfp_flags);
 
@@ -661,6 +748,10 @@ buffered_rmqueue(struct zone *zone, int order, int gfp_flags)
  * Return 1 if free pages are above 'mark'. This takes into account the order
  * of the allocation.
  */
+
+/*
+*	决定内存管理区中空闲页框个数的阈值min
+*/
 int zone_watermark_ok(struct zone *z, int order, unsigned long mark,
 		      int classzone_idx, int can_try_harder, int gfp_high)
 {
@@ -668,8 +759,10 @@ int zone_watermark_ok(struct zone *z, int order, unsigned long mark,
 	long min = mark, free_pages = z->free_pages - (1 << order) + 1;
 	int o;
 
+	/*通常__GFP_WAIT标志被置位(如果能从高端内存中分配内存,gfp_high == 1)*/
 	if (gfp_high)
 		min -= min / 2;
+	/*通常__GFP_WAIT标志被置位,或者如果当前进程是一个实时进程并且在进程上下文中已经完成了内存分配*/
 	if (can_try_harder)
 		min -= min / 4;
 
@@ -685,12 +778,25 @@ int zone_watermark_ok(struct zone *z, int order, unsigned long mark,
 		if (free_pages <= min)
 			return 0;
 	}
+
+	/*
+	*	满足下面两个条件,返回1
+	*	1.除了被分配的页框外,在内存管理中至少还有min个空闲页框,不包括为内存不足保留下来的页框
+	*	2.除了被分配的页框外,这里在order至少为k的块中起码还有min/2^k个空闲框
+	*/
 	return 1;
 }
 
 /*
  * This is the 'heart' of the zoned buddy allocator.
  */
+
+/*
+*	对一组连续页框的请求,是管理区分配器的核心
+*	参数:unsigned int gfp_mask---内存分配中指定的标志
+*		     unsigned int order---将要分配的一组连续页框数量的对数
+*		     struct zonelist *zonelist---指向zonelist数据结构的指针,按优先次序描述了适于内存分配的内存管理区
+*/
 struct page * fastcall
 __alloc_pages(unsigned int gfp_mask, unsigned int order,
 		struct zonelist *zonelist)
@@ -724,8 +830,10 @@ __alloc_pages(unsigned int gfp_mask, unsigned int order,
 
 	classzone_idx = zone_idx(zones[0]);
 
+	/*扫描包含在zonelist数据结构中的每个内存管理区*/
  restart:
 	/* Go through the zonelist once, looking for a zone with enough free */
+	/*第一次扫描,min设置为z->pages_low,z指向正在被分析的管理区描述符*/
 	for (i = 0; (z = zones[i]) != NULL; i++) {
 
 		if (!zone_watermark_ok(z, order, z->pages_low,
@@ -737,6 +845,7 @@ __alloc_pages(unsigned int gfp_mask, unsigned int order,
 			goto got_pg;
 	}
 
+	/*没有剩下多少空闲内存,唤醒kswapd内核线程异开始回收页框*/
 	for (i = 0; (z = zones[i]) != NULL; i++)
 		wakeup_kswapd(z, order);
 
@@ -744,6 +853,8 @@ __alloc_pages(unsigned int gfp_mask, unsigned int order,
 	 * Go through the zonelist again. Let __GFP_HIGH and allocations
 	 * coming from realtime tasks to go deeper into reserves
 	 */
+
+	/*第二次扫描使用了较低的阈值*/
 	for (i = 0; (z = zones[i]) != NULL; i++) {
 		if (!zone_watermark_ok(z, order, z->pages_min,
 				       classzone_idx, can_try_harder,
@@ -758,6 +869,7 @@ __alloc_pages(unsigned int gfp_mask, unsigned int order,
 	/* This allocation should allow future memory freeing. */
 	if (((p->flags & PF_MEMALLOC) || unlikely(test_thread_flag(TIF_MEMDIE))) && !in_interrupt()) {
 		/* go through the zonelist yet again, ignoring mins */
+		/*第三次扫描,试图分配页框,并忽略内存不足的阈值---不调用zone_watermark_ok()*/
 		for (i = 0; (z = zones[i]) != NULL; i++) {
 			page = buffered_rmqueue(z, order, gfp_mask);
 			if (page)
@@ -771,20 +883,24 @@ __alloc_pages(unsigned int gfp_mask, unsigned int order,
 		goto nopage;
 
 rebalance:
+	/*当前进程能在这阻塞,检查是否有其他的进程需要CPU*/
 	cond_resched();
 
 	/* We now go into synchronous reclaim */
-	p->flags |= PF_MEMALLOC;
+	p->flags |= PF_MEMALLOC;	/*已经准备好执行内存回收*/
 	reclaim_state.reclaimed_slab = 0;
 	p->reclaim_state = &reclaim_state;
 
+	/*寻找一些页框来回收*/
 	did_some_progress = try_to_free_pages(zones, gfp_mask, order);
 
+	/*后一个函数可能阻塞当前进程,一旦函数返回,重设PF_MEMALLOC,并再次调用cond_resched()*/
 	p->reclaim_state = NULL;
 	p->flags &= ~PF_MEMALLOC;
 
 	cond_resched();
 
+	/*已经释放了一些页框*/
 	if (likely(did_some_progress)) {
 		/*
 		 * Go through the zonelist yet one more time, keep
@@ -792,6 +908,7 @@ rebalance:
 		 * a parallel oom killing, we must fail if we're still
 		 * under heavy pressure.
 		 */
+		/*执行与第二次相同的扫描*/
 		for (i = 0; (z = zones[i]) != NULL; i++) {
 			if (!zone_watermark_ok(z, order, z->pages_min,
 					       classzone_idx, can_try_harder,
@@ -802,6 +919,10 @@ rebalance:
 			if (page)
 				goto got_pg;
 		}
+	/*
+	*	没有释放任何页框,邋意味着页框少到了极危险的地步,并且不可能回收页框
+	*	(gfp_mask & __GFP_FS) ---允许内核控制路径依赖于文件系统的操作来杀死一个进程
+	*/
 	} else if ((gfp_mask & __GFP_FS) && !(gfp_mask & __GFP_NORETRY)) {
 		/*
 		 * Go through the zonelist yet one more time, keep
@@ -809,6 +930,7 @@ rebalance:
 		 * a parallel oom killing, we must fail if we're still
 		 * under heavy pressure.
 		 */
+		 /* z->pages_high为阈值,再扫描一次内存管理区*/
 		for (i = 0; (z = zones[i]) != NULL; i++) {
 			if (!zone_watermark_ok(z, order, z->pages_high,
 					       classzone_idx, 0, 0))
@@ -819,6 +941,7 @@ rebalance:
 				goto got_pg;
 		}
 
+		/*通过一些进程开始释放一些内存*/
 		out_of_memory(gfp_mask);
 		goto restart;
 	}
@@ -838,6 +961,7 @@ rebalance:
 			do_retry = 1;
 	}
 	if (do_retry) {
+		/*使进程休眠一下*/
 		blk_congestion_wait(WRITE, HZ/50);
 		goto rebalance;
 	}
@@ -860,6 +984,10 @@ EXPORT_SYMBOL(__alloc_pages);
 /*
  * Common helper functions.
  */
+
+/*
+*	类似于alloc_pages()，但返回第一个所分配页的线性地址
+*/
 fastcall unsigned long __get_free_pages(unsigned int gfp_mask, unsigned int order)
 {
 	struct page * page;
@@ -871,6 +999,10 @@ fastcall unsigned long __get_free_pages(unsigned int gfp_mask, unsigned int orde
 
 EXPORT_SYMBOL(__get_free_pages);
 
+/*
+*	获得填满0的页框
+*	返回获取页框的线性地址
+*/
 fastcall unsigned long get_zeroed_page(unsigned int gfp_mask)
 {
 	struct page * page;
@@ -897,18 +1029,30 @@ void __pagevec_free(struct pagevec *pvec)
 		free_hot_cold_page(pvec->pages[i], pvec->cold);
 }
 
+/*
+*	释放 页框
+*/
 fastcall void __free_pages(struct page *page, unsigned int order)
 {
+	/*
+	*	!PageReserved(page)---检查第一个页框是否属于动态内存
+	*	put_page_testzero(page)---减少page->count的值,观察其是否>= 0
+	*/
 	if (!PageReserved(page) && put_page_testzero(page)) {
 		if (order == 0)
+			/*释放页框给适当内存管理区的内阁CPU热高速缓存*/
 			free_hot_page(page);
 		else
+			/*将页框加入到本地链表中,*/
 			__free_pages_ok(page, order);
 	}
 }
 
 EXPORT_SYMBOL(__free_pages);
 
+/*
+*	类似于__free_pages,但它接收的参数为要释放的第一个页框的线性地址
+*/
 fastcall void free_pages(unsigned long addr, unsigned int order)
 {
 	if (addr != 0) {

@@ -80,10 +80,18 @@ fastcall int handle_IRQ_event(unsigned int irq, struct pt_regs *regs,
 {
 	int ret, retval = 0, status = 0;
 
+/*SA_INTERRUPT被清0,用sti指令激活本地中断*/
 	if (!(action->flags & SA_INTERRUPT))
 		local_irq_enable();
 
+/*执行每个中断的中断服务例程*/
 	do {
+		/*
+		*	中断服务例程参数:	irq---IRQ号
+		*								dev_id---设备标识符
+		*								regs---指向内核栈的pt_regs结构的指针
+		*										栈中含有中断发生后随即保存的寄存器
+		*/
 		ret = action->handler(irq, action->dev_id, regs);
 		if (ret == IRQ_HANDLED)
 			status |= action->flags;
@@ -94,7 +102,8 @@ fastcall int handle_IRQ_event(unsigned int irq, struct pt_regs *regs,
 	if (status & SA_SAMPLE_RANDOM)
 		add_interrupt_randomness(irq);
 	local_irq_disable();
-
+	
+/*如果没有与中断对应的中断服务例程返回0,否则返回1*/
 	return retval;
 }
 
@@ -103,6 +112,11 @@ fastcall int handle_IRQ_event(unsigned int irq, struct pt_regs *regs,
  * SMP cross-CPU interrupts have their own specific
  * handlers).
  */
+ /*
+*	参数:  unsigned int irq---IRQ号,通过eax寄存器 
+*			struct pt_regs *regs---指向pt_regs的指针,通过edx寄存器,用户寄存器的值已经存在其中
+*	__do_IRQ是以禁止本地中断运行的.
+*/
 fastcall unsigned int __do_IRQ(unsigned int irq, struct pt_regs *regs)
 {
 	irq_desc_t *desc = irq_desc + irq;

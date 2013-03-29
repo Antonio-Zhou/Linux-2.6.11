@@ -639,6 +639,10 @@ static inline void rep_nop(void)
    However we don't do prefetches for pre XP Athlons currently
    That should be fixed. */
 #define ARCH_HAS_PREFETCH
+/*
+*	提示CPU控制单元把next的进程描述符第一部分字段的内容填入硬件高速缓存
+
+*/
 extern inline void prefetch(const void *x)
 {
 	alternative_input(ASM_NOP4,

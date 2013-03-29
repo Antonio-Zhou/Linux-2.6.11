@@ -106,10 +106,15 @@ alloc_pages(unsigned int gfp_mask, unsigned int order)
 extern struct page *alloc_page_vma(unsigned gfp_mask,
 			struct vm_area_struct *vma, unsigned long addr);
 #else
+/*
+*	请求2^order个连续的页框
+*	返回第一个所分配页框描述符的地址,或者NULL
+*/
 #define alloc_pages(gfp_mask, order) \
 		alloc_pages_node(numa_node_id(), gfp_mask, order)
 #define alloc_page_vma(gfp_mask, vma, addr) alloc_pages(gfp_mask, 0)
 #endif
+/*获得一个单独页框*/
 #define alloc_page(gfp_mask) alloc_pages(gfp_mask, 0)
 
 extern unsigned long FASTCALL(__get_free_pages(unsigned int gfp_mask, unsigned int order));
@@ -118,6 +123,7 @@ extern unsigned long FASTCALL(get_zeroed_page(unsigned int gfp_mask));
 #define __get_free_page(gfp_mask) \
 		__get_free_pages((gfp_mask),0)
 
+/*获得适用于DMA的页框*/
 #define __get_dma_pages(gfp_mask, order) \
 		__get_free_pages((gfp_mask) | GFP_DMA,(order))
 

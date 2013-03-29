@@ -379,6 +379,11 @@ void profile_hit(int type, void *__pc)
 }
 #endif /* !CONFIG_SMP */
 
+/*
+*	为代码监管器采集数据
+*	单处理器系统---do_timer_interrupt()调用(全局时钟中断处理程序)
+*	多处理器系统---smp_local_timer_interrupt()调用(本地时钟中断处理程序)
+*/
 void profile_tick(int type, struct pt_regs *regs)
 {
 	if (type == CPU_PROFILING && timer_hook)

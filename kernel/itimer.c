@@ -19,6 +19,7 @@ int do_getitimer(int which, struct itimerval *value)
 	register unsigned long val;
 
 	switch (which) {
+		/*真正过去的时间,进程接收SIGALRM信号*/
 	case ITIMER_REAL:
 		val = 0;
 		/* 
@@ -34,10 +35,12 @@ int do_getitimer(int which, struct itimerval *value)
 		jiffies_to_timeval(val, &value->it_value);
 		jiffies_to_timeval(current->it_real_incr, &value->it_interval);
 		break;
+		/*进程在用户态下花费的时间,接收SIGVTALRM信号*/
 	case ITIMER_VIRTUAL:
 		cputime_to_timeval(current->it_virt_value, &value->it_value);
 		cputime_to_timeval(current->it_virt_incr, &value->it_interval);
 		break;
+		/*进程既在用户态下又在内核态下花费的时间,接收SIGPROF信号*/
 	case ITIMER_PROF:
 		cputime_to_timeval(current->it_prof_value, &value->it_value);
 		cputime_to_timeval(current->it_prof_incr, &value->it_interval);
@@ -87,6 +90,7 @@ int do_setitimer(int which, struct itimerval *value, struct itimerval *ovalue)
 	if (ovalue && (k = do_getitimer(which, ovalue)) < 0)
 		return k;
 	switch (which) {
+		/*利用动态定时器实现*/
 		case ITIMER_REAL:
 			del_timer_sync(&current->real_timer);
 			expire = timeval_to_jiffies(&value->it_value);
@@ -127,6 +131,12 @@ int do_setitimer(int which, struct itimerval *value, struct itimerval *ovalue)
 /* SMP: Again, only we play with our itimers, and signals are SMP safe
  *      now so that is not an issue at all anymore.
  */
+
+/*
+*	参数:	struct itimerval __user *value---指定了定时器初识的持续时间,
+*										以及定时器被自动重新激活后使用的持续时间(对于一次性执行的定时器而言为0)
+*			struct itimerval __user *ovalue---系统调用将先前定时器的参数填充到该结构中
+*/
 asmlinkage long sys_setitimer(int which,
 			      struct itimerval __user *value,
 			      struct itimerval __user *ovalue)

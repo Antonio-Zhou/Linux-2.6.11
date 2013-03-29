@@ -71,6 +71,7 @@ void __init apic_intr_init(void)
 	smp_intr_init();
 #endif
 	/* self generated IPI for local APIC timer */
+	/*设置IDT的中断门*/
 	set_intr_gate(LOCAL_TIMER_VECTOR, apic_timer_interrupt);
 
 	/* IPI vectors for APIC spurious and error interrupts */
@@ -930,6 +931,11 @@ void __setup_APIC_LVTT(unsigned int clocks)
 	apic_write_around(APIC_TMICT, clocks/APIC_DIVISOR);
 }
 
+/*
+*	calibrate_APIC_clock()计算出来的确切值被用来对本地所有APIC编程,
+*	并由此在每个节拍产生一次本地时钟中断
+*	该函数被系统中的每个CPU执行一次
+*/
 static void __init setup_APIC_timer(unsigned int clocks)
 {
 	unsigned long flags;
@@ -959,6 +965,11 @@ static void __init setup_APIC_timer(unsigned int clocks)
  * APIC irq that way.
  */
 
+/*
+*	通过正在启动的CPU的本地APIC来计算在一个节拍内收到多少个总线时钟信号
+*	所有本地APIC定时器都是同步的,因为它们都基于公共总线时钟信号
+*	因此calibrate_APIC_clock()计算出来的值对系统中其他CPU同样有效
+*/
 int __init calibrate_APIC_clock(void)
 {
 	unsigned long long t1 = 0, t2 = 0;
@@ -1133,6 +1144,7 @@ inline void smp_local_timer_interrupt(struct pt_regs * regs)
 		}
 
 #ifdef CONFIG_SMP
+		/*检查当前进程运行的时间并更新一些本地CPU统计数*/
 		update_process_times(user_mode(regs));
 #endif
 	}
@@ -1158,19 +1170,23 @@ inline void smp_local_timer_interrupt(struct pt_regs * regs)
  *   interrupt as well. Thus we cannot inline the local irq ... ]
  */
 
+/*高级中断处理程序*/
 fastcall void smp_apic_timer_interrupt(struct pt_regs *regs)
 {
+	/*获得CPU逻辑号*/
 	int cpu = smp_processor_id();
 
 	/*
 	 * the NMI deadlock-detector uses this.
 	 */
+	 /*?????????????????*/
 	irq_stat[cpu].apic_timer_irqs++;
 
 	/*
 	 * NOTE! We'd better ACK the irq immediately,
 	 * because timer handling can be slow.
 	 */
+	 /*应答本地APIC中断*/
 	ack_APIC_irq();
 	/*
 	 * update_process_times() expects us to have done irq_enter().

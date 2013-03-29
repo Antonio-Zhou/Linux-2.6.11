@@ -388,6 +388,11 @@ static inline unsigned long __ffs(unsigned long word)
  * unlikely to be set. It's guaranteed that at least one of the 140
  * bits is cleared.
  */
+
+/*
+*	搜索活动进程集合位掩码的第一个非0位
+*	返回32位字中被设置的为1 的最低位的位下标
+*/
 static inline int sched_find_first_bit(const unsigned long *b)
 {
 	if (unlikely(b[0]))

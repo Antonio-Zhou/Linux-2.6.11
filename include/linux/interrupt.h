@@ -33,15 +33,16 @@ typedef int irqreturn_t;
 #define IRQ_HANDLED	(1)
 #define IRQ_RETVAL(x)	((x) != 0)
 
+/*每个描述符涉及一个特定的硬件设备和一个特定的中断*/
 struct irqaction {
-	irqreturn_t (*handler)(int, void *, struct pt_regs *);
-	unsigned long flags;
-	cpumask_t mask;
-	const char *name;
-	void *dev_id;
-	struct irqaction *next;
-	int irq;
-	struct proc_dir_entry *dir;
+	irqreturn_t (*handler)(int, void *, struct pt_regs *);	/*指向一个I/O设备的中断服务例程.这是允许多个设备共享同一IRQ的关键字段*/
+	unsigned long flags;	/*描述IRQ与I/O设备之间的关系*/
+	cpumask_t mask;		/**/
+	const char *name;		/*I/O设备名(/proc/interrupt文件,列出服务的IRQ时也显示设备名)*/
+	void *dev_id;		/*I/O设备的私有字段*/
+	struct irqaction *next;	/*指向irqaction描述符链表的下一个元素.链表中的元素指向共享同一IRQ的硬件设备*/
+	int irq;				/*IRQ线*/
+	struct proc_dir_entry *dir;	/*指向与IRQn相关的/proc/irq/n目录的描述符*/
 };
 
 extern irqreturn_t no_action(int cpl, void *dev_id, struct pt_regs *regs);
@@ -100,14 +101,15 @@ extern void local_bh_enable(void);
    al. should be converted to tasklets, not to softirqs.
  */
 
+/*低下标意味着高优先级,因为软中断函数将从下标0开始执行*/
 enum
 {
-	HI_SOFTIRQ=0,
-	TIMER_SOFTIRQ,
-	NET_TX_SOFTIRQ,
-	NET_RX_SOFTIRQ,
-	SCSI_SOFTIRQ,
-	TASKLET_SOFTIRQ
+	HI_SOFTIRQ=0,			/*处理高优先级的tasklet*/
+	TIMER_SOFTIRQ,			/*和时钟中断相关的tasklet*/
+	NET_TX_SOFTIRQ,		/*把数据包传送到网卡*/
+	NET_RX_SOFTIRQ,		/*从网卡接收数据包*/
+	SCSI_SOFTIRQ,			/*SCSI命令的后台中断处理*/
+	TASKLET_SOFTIRQ		/*处理常规tasklet*/
 };
 
 /* softirq mask and active fields moved to irq_cpustat_t in
@@ -116,8 +118,8 @@ enum
 
 struct softirq_action
 {
-	void	(*action)(struct softirq_action *);
-	void	*data;
+	void	(*action)(struct softirq_action *);	/*指向软中断函数的一个action指针*/
+	void	*data;							/*指向软中断函数需要的通用数据结构的data指针*/
 };
 
 asmlinkage void do_softirq(void);
@@ -150,11 +152,11 @@ extern void FASTCALL(raise_softirq(unsigned int nr));
 
 struct tasklet_struct
 {
-	struct tasklet_struct *next;
-	unsigned long state;
-	atomic_t count;
-	void (*func)(unsigned long);
-	unsigned long data;
+	struct tasklet_struct *next;		/*指向链表中下一个描述符的指针*/
+	unsigned long state;			/*tasklet的状态*/
+	atomic_t count;				/*锁计数器*/
+	void (*func)(unsigned long);		/*指向tasklet函数的指针*/
+	unsigned long data;			/*一个无符号长整数,可以由tasklet函数来使用*/
 };
 
 #define DECLARE_TASKLET(name, func, data) \
@@ -166,7 +168,15 @@ struct tasklet_struct name = { NULL, 0, ATOMIC_INIT(1), func, data }
 
 enum
 {
+	/*
+	*	tasklet是被挂起的(曾被调度过)
+	*	也就是说,tasklet描述符被插入到tasklet_vec和tasklet_hi_vec数组的其中一个链表中
+	*/
 	TASKLET_STATE_SCHED,	/* Tasklet is scheduled for execution */
+	/*
+	*	tasklet正在被执行
+	*	单处理器上不使用这个标志
+	*/
 	TASKLET_STATE_RUN	/* Tasklet is running (SMP only) */
 };
 
@@ -194,8 +204,13 @@ static inline void tasklet_unlock_wait(struct tasklet_struct *t)
 
 extern void FASTCALL(__tasklet_schedule(struct tasklet_struct *t));
 
+/*
+*	根据自己tasklet需要的优先级,调用tasklet_schedule()或tasklet_hi_schedule()
+*	激活tasklet
+*/
 static inline void tasklet_schedule(struct tasklet_struct *t)
 {
+	/*检查TASKLET_STATE_SCHED标志,如果设置则返回(tasklet已经被调度)*/
 	if (!test_and_set_bit(TASKLET_STATE_SCHED, &t->state))
 		__tasklet_schedule(t);
 }

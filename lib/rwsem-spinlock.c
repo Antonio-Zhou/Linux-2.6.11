@@ -306,6 +306,7 @@ void fastcall __up_write(struct rw_semaphore *sem)
  * downgrade a write lock into a read lock
  * - just wake up any readers at the front of the queue
  */
+ /*自动把写锁转换成读锁*/
 void fastcall __downgrade_write(struct rw_semaphore *sem)
 {
 	rwsemtrace(sem, "Entering __downgrade_write");

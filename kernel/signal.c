@@ -401,6 +401,7 @@ void __exit_signal(struct task_struct *tsk)
 		 * there are no other threads left in the group and timer
 		 * signals are constrained to threads inside the group.
 		 */
+		 /*从进程中剥离掉所有的POSIX时间间隔定时器*/
 		exit_itimers(sig);
 		kmem_cache_free(signal_cachep, sig);
 	}
@@ -1084,6 +1085,7 @@ void zap_other_threads(struct task_struct *p)
 	if (thread_group_empty(p))
 		return;
 
+/*扫描与current->tgid对应的PIDTYPE_TGID类型的散列表中的每个PID链表，向表中所有不同于current的进程发送SIGKILL信号*/
 	for (t = next_thread(p); t != p; t = next_thread(t)) {
 		/*
 		 * Don't bother with already dead threads

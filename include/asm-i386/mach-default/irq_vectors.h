@@ -45,8 +45,13 @@
  */
 #define SPURIOUS_APIC_VECTOR	0xff
 #define ERROR_APIC_VECTOR	0xfe
+/*发往所有CPU(不包括发送者),强制它们的转换后援缓冲器(TLB)变为无效
+	处理程序(invalidate_interrupt())刷新处理器的某些TLB表项*/
 #define INVALIDATE_TLB_VECTOR	0xfd
+/*当一个CPU接收这种类型的中断时,相应的处理程序(reschedule_interrupt)限定自己来应答中断*/
 #define RESCHEDULE_VECTOR	0xfc
+/*发往所有CPU(不包括发送者),强制这些CPU运行发送者传递过来的函数.
+	处理程序call_function_interrupt()*/
 #define CALL_FUNCTION_VECTOR	0xfb
 
 #define THERMAL_APIC_VECTOR	0xf0

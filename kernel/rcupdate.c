@@ -83,6 +83,11 @@ static int maxbatch = 10;
  * sections are delimited by rcu_read_lock() and rcu_read_unlock(),
  * and may be nested.
  */
+
+/*
+*	写者调用该函数来释放数据结构的旧副本
+*	当所有的CPU都通过静止状态之后,call_rcu接受rcu_head描述符
+*/
 void fastcall call_rcu(struct rcu_head *head,
 				void (*func)(struct rcu_head *rcu))
 {
@@ -360,6 +365,10 @@ static void rcu_process_callbacks(unsigned long unused)
 				&__get_cpu_var(rcu_bh_data));
 }
 
+/*
+*	检查本地CPU是否经历了静止状态
+*	并调用tasklet_schedule()激活本地CPU的run_tasklet任务队列
+*/
 void rcu_check_callbacks(int cpu, int user)
 {
 	if (user || 

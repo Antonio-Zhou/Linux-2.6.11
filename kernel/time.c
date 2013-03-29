@@ -570,12 +570,17 @@ void getnstimeofday(struct timespec *tv)
 #endif
 
 #if (BITS_PER_LONG < 64)
+/* 读取jiffies_64的值并返回该值*/
 u64 get_jiffies_64(void)
 {
 	unsigned long seq;
 	u64 ret;
 
 	do {
+		/*
+		*	xtime_lock顺序锁用来保护64位的读操作,
+		*	该函数一直读jiffies_64变量知道确认该变量并没有被其他内核控制路径更新才读取jiffies_64变量
+		*/
 		seq = read_seqbegin(&xtime_lock);
 		ret = jiffies_64;
 	} while (read_seqretry(&xtime_lock, seq));

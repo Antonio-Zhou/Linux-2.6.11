@@ -164,13 +164,19 @@ struct init_timer_opts __initdata timer_pit_init = {
 	.opts = &timer_pit,
 };
 
+/*初始化PIT*/
 void setup_pit_timer(void)
 {
 	extern spinlock_t i8253_lock;
 	unsigned long flags;
 
 	spin_lock_irqsave(&i8253_lock, flags);
+	/*
+	*	类似于outb(),不过它会通过一个空操作而产生一个暂停,避免硬件难以分辨
+	*	让PIT以新的频率产生中断
+	*/
 	outb_p(0x34,PIT_MODE);		/* binary, mode 2, LSB/MSB, ch 0 */
+	/*产生一个更短的延迟*/
 	udelay(10);
 	outb_p(LATCH & 0xff , PIT_CH0);	/* LSB */
 	udelay(10);

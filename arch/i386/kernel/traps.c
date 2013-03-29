@@ -992,6 +992,9 @@ static void __init set_task_gate(unsigned int n, unsigned int gdt_entry)
 }
 
 
+/*
+*将一些最终值(处理异常的函数)插入到IDT 的非屏蔽中断及异常表项中
+*/
 void __init trap_init(void)
 {
 #ifdef CONFIG_EISA

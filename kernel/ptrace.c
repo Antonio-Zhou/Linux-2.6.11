@@ -72,6 +72,7 @@ void __ptrace_unlink(task_t *child)
 	if (!list_empty(&child->ptrace_list)) {
 		list_del_init(&child->ptrace_list);
 		REMOVE_LINKS(child);
+		/*让该进程重新属于初识的父进程*/
 		child->parent = child->real_parent;
 		SET_LINKS(child);
 	}

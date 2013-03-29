@@ -81,6 +81,10 @@ VM_MASK		= 0x00020000
 #define resume_kernel		restore_all
 #endif
 
+/*
+*	在栈中保存中断处理程序可能会使用的所有CPU寄存器
+*	eflags,cs,eip,ss,esp 除外
+*/
 #define SAVE_ALL \
 	cld; \
 	pushl %es; \
@@ -164,6 +168,8 @@ ret_from_intr:
 	movb CS(%esp), %al
 	testl $(VM_MASK | 3), %eax
 	jz resume_kernel		# returning to kernel or vm86-space
+	
+	/*恢复的程序原来运行在用户态*/
 ENTRY(resume_userspace)
  	cli				# make sure we don't miss an interrupt
 					# setting need_resched or sigpending
@@ -346,7 +352,7 @@ vector=0
 ENTRY(irq_entries_start)
 .rept NR_IRQS
 	ALIGN
-1:	pushl $vector-256
+1:	pushl $vector-256		/*引用这个数时,*/
 	jmp common_interrupt
 .data
 	.long 1b
@@ -356,11 +362,14 @@ vector=vector+1
 
 	ALIGN
 common_interrupt:
+	/*保存可能用到的reg*/
 	SAVE_ALL
+	/*栈顶地址*/
 	movl %esp,%eax
 	call do_IRQ
 	jmp ret_from_intr
 
+/*************IPI************/
 #define BUILD_INTERRUPT(name, nr)	\
 ENTRY(name)				\
 	pushl $nr-256;			\
@@ -377,6 +386,7 @@ ENTRY(divide_error)
 	pushl $do_divide_error
 	ALIGN
 error_code:
+#保存会用到的寄存器
 	pushl %ds
 	pushl %eax
 	xorl %eax, %eax
@@ -387,16 +397,21 @@ error_code:
 	decl %eax			# eax = -1
 	pushl %ecx
 	pushl %ebx
-	cld
+	cld		#清eflags的方向标志DF，以确保调用字符串指令时会自动增加edi和esi寄存器的值
 	movl %es, %ecx
+	#把esp+32处的C函数地址装入edi寄存器中，在这个位置写入es的值
 	movl ES(%esp), %edi		# get the function address
+	#把栈中位于esp+36处的硬件出错码拷贝到edx中，给栈中这一位置存上值-1，用来把0x80异常与其他异常隔离开来
 	movl ORIG_EAX(%esp), %edx	# get the error code
 	movl %eax, ORIG_EAX(%esp)
 	movl %ecx, ES(%esp)
 	movl $(__USER_DS), %ecx
+	#把用户数据段的选择符拷贝到ds和es寄存器中
 	movl %ecx, %ds
 	movl %ecx, %es
+	#栈顶拷贝到eax寄存器。表示内存单元的地址，在这个单元中存放的是第一步保存的最后一个寄存器的值
 	movl %esp,%eax			# pt_regs pointer
+	#调用在edi中的C函数
 	call *%edi
 	jmp ret_from_exception
 
@@ -469,6 +484,7 @@ debug_stack_correct:
  * check whether we got an NMI on the debug path where the debug
  * fault happened on the sysenter path.
  */
+ /*一旦每个时钟节拍到来,所有CPU,不管其正在做什么,都开始执行NMI中断处理程序*/
 ENTRY(nmi)
 	cmpl $sysenter_entry,(%esp)
 	je nmi_stack_fixup

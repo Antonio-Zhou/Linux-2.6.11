@@ -30,7 +30,17 @@
 #include <linux/spinlock.h>
 #include <linux/preempt.h>
 
+/*
+*	顺序锁,和读/写自旋锁非常相似,只是它为写者赋予了较高的优先级
+*	即使在读者正在读的时候也允许写者继续运行,好像永远不会等待(除非另外一个写者正在写)
+*	缺点是读者不得不反复多次读相同的数据直到它获得有效的副本
+*/
 typedef struct {
+	/*
+	*	顺序计数器
+	*	每个读者必须在读数据前后两次读顺序计数器,并检查两次读到的值是否相同,
+	*	如果不同,就说明新的写者已经开始写并增加了顺序计数器,因此暗示读者刚读到的数据无效
+	*/
 	unsigned sequence;
 	spinlock_t lock;
 } seqlock_t;
@@ -40,12 +50,19 @@ typedef struct {
  * OK now.  Be cautious.
  */
 #define SEQLOCK_UNLOCKED { 0, SPIN_LOCK_UNLOCKED }
+/*初始化,未上锁*/
 #define seqlock_init(x)	do { *(x) = (seqlock_t) SEQLOCK_UNLOCKED; } while (0)
 
 
 /* Lock out other writers and update the count.
  * Acts like a normal spin_lock/unlock.
  * Don't need preempt_disable() because that is in the spin_lock already.
+ */
+ 
+ /*
+ *	write_seqlock()和write_sequnlock()的实现保证
+ *	写者在写的过程中,计数器的值是奇数
+ *	并且当没有写者在改变数据的时候,计数器的值是偶数.
  */
 static inline void write_seqlock(seqlock_t *sl)
 {

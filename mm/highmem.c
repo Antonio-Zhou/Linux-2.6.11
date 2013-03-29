@@ -51,14 +51,27 @@ static void page_pool_free(void *page, void *data)
  *  n means that there are (n-1) current users of it.
  */
 #ifdef CONFIG_HIGHMEM
+/*
+*	包含LAST_PKMAP个计数器,pkmap_page_table中每一项都有一个
+*	==0---对应的页表项没有映射任何高端内存页框,并且是可用的
+*	==1---对应的页表项没有映射任何高端内存页框,但是它不能使用,
+*			因为自从它最后一次使用以来,其相应的TLB表现还未被刷新
+*	==n(远大于1)---相应于页表项映射一个高端内存页框,意味着正好有n-1个内核成分在使用这个页框
+*/
 static int pkmap_count[LAST_PKMAP];
+/*pkmap_page_table页表中上次使用过页表项的索引*/
 static unsigned int last_pkmap_nr;
 static  __cacheline_aligned_in_smp DEFINE_SPINLOCK(kmap_lock);
 
+/*永久内核映射允许内核建立高端页框到内核地址空间的长期映射*/
 pte_t * pkmap_page_table;
 
 static DECLARE_WAIT_QUEUE_HEAD(pkmap_map_wait);
 
+/*
+*	每个值为1的计数器都表示在pkmap_page_table页表项中是空闲的,但不能被使用,因为相应的TLB表项还没有被刷新
+*	函数将它们的计数器重置为0,删除page_address_htable散列表中对应的元素,并在pkmap_page_table的所有项上进行TLB刷新
+*/
 static void flush_all_zero_pkmaps(void)
 {
 	int i;
@@ -97,6 +110,10 @@ static void flush_all_zero_pkmaps(void)
 	flush_tlb_kernel_range(PKMAP_ADDR(0), PKMAP_ADDR(LAST_PKMAP));
 }
 
+/*
+*	把页框的物理地址插入到pkmap_page_table的一个项中
+*	并在page_address_htable散列表中加入元素
+*/
 static inline unsigned long map_new_virtual(struct page *page)
 {
 	unsigned long vaddr;
@@ -106,11 +123,14 @@ start:
 	count = LAST_PKMAP;
 	/* Find an empty entry */
 	for (;;) {
+		/*last_pkmap_nr保证了函数从上次停止的地方开始,穿越pkmap_count数组执行循环*/
 		last_pkmap_nr = (last_pkmap_nr + 1) & LAST_PKMAP_MASK;
 		if (!last_pkmap_nr) {
+			/*	寻找计数器为1的另一趟循环*/
 			flush_all_zero_pkmaps();
 			count = LAST_PKMAP;
 		}
+		/*扫描pkmap_count中的所有计数器直到找到一个空值*/
 		if (!pkmap_count[last_pkmap_nr])
 			break;	/* Found a usable entry */
 		if (--count)
@@ -119,9 +139,16 @@ start:
 		/*
 		 * Sleep for somebody else to unmap their entries
 		 */
+
+		/*
+		*	如果在pkmap_count没有找到空的计数器,
+		*	阻塞当前进程,直到某个进程释放pkmap_page_table页表中的一个表项
+		*/
 		{
+			/*将current插入到pkmap_map_wait等待队列*/
 			DECLARE_WAITQUEUE(wait, current);
 
+			/*设置current的状态为TASK_UNINTERRUPTIBLE,并调用schedule(),放弃CPU*/
 			__set_current_state(TASK_UNINTERRUPTIBLE);
 			add_wait_queue(&pkmap_map_wait, &wait);
 			spin_unlock(&kmap_lock);
@@ -130,6 +157,11 @@ start:
 			spin_lock(&kmap_lock);
 
 			/* Somebody else might have mapped it while we slept */
+			/*
+			*	进程被唤醒
+			*	检查是否存在另外一个进程已经映射该页,
+			*	如果还没有其他进程映射该页,则内循环重新开始
+			*/
 			if (page_address(page))
 				return (unsigned long)page_address(page);
 
@@ -137,9 +169,11 @@ start:
 			goto start;
 		}
 	}
+	/*确定该项对应的线性地址,为它在pkmap_page_table页表中创建一个项*/
 	vaddr = PKMAP_ADDR(last_pkmap_nr);
 	set_pte(&(pkmap_page_table[last_pkmap_nr]), mk_pte(page, kmap_prot));
 
+	/*该项已经被使用,因而置1*/
 	pkmap_count[last_pkmap_nr] = 1;
 	set_page_address(page, (void *)vaddr);
 
@@ -156,10 +190,17 @@ void fastcall *kmap_high(struct page *page)
 	 *
 	 * We cannot call this from interrupts, as it may block
 	 */
+
+	/*
+	*	保护页表免受多处理器系统上的并发访问
+	*	没有必要禁止中断,因为中断处理程序和可延迟函数不能调用kmap()
+	*/
 	spin_lock(&kmap_lock);
+	/*是否已经被映射*/
 	vaddr = (unsigned long)page_address(page);
 	if (!vaddr)
 		vaddr = map_new_virtual(page);
+	/*页框的线性地址所对应的计数器加1来将调用该函数的新内核成分考虑在内*/
 	pkmap_count[PKMAP_NR(vaddr)]++;
 	if (pkmap_count[PKMAP_NR(vaddr)] < 2)
 		BUG();
@@ -176,9 +217,11 @@ void fastcall kunmap_high(struct page *page)
 	int need_wakeup;
 
 	spin_lock(&kmap_lock);
+	/*计算出页的线性地址*/
 	vaddr = (unsigned long)page_address(page);
 	if (!vaddr)
 		BUG();
+	/*pkmap_count数组的索引*/
 	nr = PKMAP_NR(vaddr);
 
 	/*
@@ -189,6 +232,10 @@ void fastcall kunmap_high(struct page *page)
 	switch (--pkmap_count[nr]) {
 	case 0:
 		BUG();
+	/*
+	*	与1匹配成功,说明没有进程在使用页
+	*	唤醒由map_new_virtual()添加在等待队列中的进程
+	*/
 	case 1:
 		/*
 		 * Avoid an unnecessary wake_up() function call.
@@ -490,9 +537,13 @@ EXPORT_SYMBOL(blk_queue_bounce);
 /*
  * Describes one page->virtual association
  */
+
+/*
+*	用于为高端内存中的每一个页框进行当前的映射
+*/
 struct page_address_map {
 	struct page *page;
-	void *virtual;
+	void *virtual;		/*分配给该页框的线性地址*/
 	struct list_head list;
 };
 
@@ -510,17 +561,25 @@ static struct page_address_slot {
 	spinlock_t lock;			/* Protect this bucket's list */
 } ____cacheline_aligned_in_smp page_address_htable[1<<PA_HASH_ORDER];
 
+/*
+*	在page_address_htable中查找页框
+*/
 static struct page_address_slot *page_slot(struct page *page)
 {
 	return &page_address_htable[hash_ptr(page, PA_HASH_ORDER)];
 }
 
+/*
+*	返回页框对应的线性地址
+*	如果页框在高端内存中,并没有被映射,返回NULL
+*/
 void *page_address(struct page *page)
 {
 	unsigned long flags;
 	void *ret;
 	struct page_address_slot *pas;
 
+	/*页框不在高端内存中,即线性地址总是存在*/
 	if (!PageHighMem(page))
 		return lowmem_page_address(page);
 
@@ -544,6 +603,9 @@ done:
 
 EXPORT_SYMBOL(page_address);
 
+/*
+*	插入一个新元素到page_address_htable
+*/
 void set_page_address(struct page *page, void *virtual)
 {
 	unsigned long flags;
