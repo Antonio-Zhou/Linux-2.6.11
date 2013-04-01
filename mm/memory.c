@@ -219,6 +219,9 @@ out:
 	return pte_offset_map(pmd, address);
 }
 
+/*
+*	分配一个新的页表,并更新页中间目录中相应的目录项
+*/
 pte_t fastcall * pte_alloc_kernel(struct mm_struct *mm, pmd_t *pmd, unsigned long address)
 {
 	if (!pmd_present(*pmd)) {

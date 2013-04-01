@@ -51,15 +51,25 @@ static void free_pool(mempool_t *pool)
  * functions might sleep - as long as the mempool_alloc function is not called
  * from IRQ contexts.
  */
+
+/*
+*	创建一个新的内存池
+*	参数:int min_nr---内存元素的个数
+*		      mempool_alloc_t *alloc_fn---实现alloc方法的函数的地址
+*		      mempool_free_t *free_fn---实现free方法的函数的地址
+*		      void *pool_dat---赋给pool_data字段的任意值
+*/
 mempool_t * mempool_create(int min_nr, mempool_alloc_t *alloc_fn,
 				mempool_free_t *free_fn, void *pool_data)
 {
 	mempool_t *pool;
 
+	/*为mempool_t对象分配内存*/
 	pool = kmalloc(sizeof(*pool), GFP_KERNEL);
 	if (!pool)
 		return NULL;
-	memset(pool, 0, sizeof(*pool));
+	memset(pool, 0, sizeof(*pool));	
+	/*为指向内存元素的指针数组分配内存*/
 	pool->elements = kmalloc(min_nr * sizeof(void *), GFP_KERNEL);
 	if (!pool->elements) {
 		kfree(pool);
@@ -75,6 +85,8 @@ mempool_t * mempool_create(int min_nr, mempool_alloc_t *alloc_fn,
 	/*
 	 * First pre-allocate the guaranteed number of buffers.
 	 */
+	 
+	 /*反复调用alloc方法来得到min_nr个内存元素*/
 	while (pool->curr_nr < pool->min_nr) {
 		void *element;
 
@@ -168,6 +180,10 @@ EXPORT_SYMBOL(mempool_resize);
  * has to guarantee that all elements have been returned to the pool (ie:
  * freed) prior to calling mempool_destroy().
  */
+
+/*
+*	释放池中所有内存元素,然后释放元素数组和mempool_t对象自己
+*/
 void mempool_destroy(mempool_t *pool)
 {
 	if (pool->curr_nr != pool->min_nr)
@@ -187,6 +203,12 @@ EXPORT_SYMBOL(mempool_destroy);
  * *never* fails when called from process contexts. (it might
  * fail if called from an IRQ context.)
  */
+
+/*
+*	从内存池分配一个元素
+*	参数:mempool_t *pool---将mempool_t对象的地址
+*		      int gfp_mask---内存分配标志
+*/
 void * mempool_alloc(mempool_t *pool, int gfp_mask)
 {
 	void *element;
@@ -247,11 +269,16 @@ EXPORT_SYMBOL(mempool_alloc);
  *
  * this function only sleeps if the free_fn() function sleeps.
  */
+
+/*
+*	释放一个元素到内存池
+*/
 void mempool_free(void *element, mempool_t *pool)
 {
 	unsigned long flags;
 
 	mb();
+	/*内存池未满*/
 	if (pool->curr_nr < pool->min_nr) {
 		spin_lock_irqsave(&pool->lock, flags);
 		if (pool->curr_nr < pool->min_nr) {
@@ -262,6 +289,7 @@ void mempool_free(void *element, mempool_t *pool)
 		}
 		spin_unlock_irqrestore(&pool->lock, flags);
 	}
+	/*已满,调用free方法来释放元素到基本内存分配器*/
 	pool->free(element, pool->pool_data);
 }
 EXPORT_SYMBOL(mempool_free);

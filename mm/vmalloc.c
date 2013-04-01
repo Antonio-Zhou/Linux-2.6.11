@@ -23,6 +23,9 @@
 DEFINE_RWLOCK(vmlist_lock);
 struct vm_struct *vmlist;
 
+/*
+*	map_area_pte()的反向操作
+*/
 static void unmap_area_pte(pmd_t *pmd, unsigned long address,
 				  unsigned long size)
 {
@@ -45,6 +48,7 @@ static void unmap_area_pte(pmd_t *pmd, unsigned long address,
 
 	do {
 		pte_t page;
+		/*将pte指向的页表项设为0*/
 		page = ptep_get_and_clear(pte);
 		address += PAGE_SIZE;
 		pte++;
@@ -56,6 +60,9 @@ static void unmap_area_pte(pmd_t *pmd, unsigned long address,
 	} while (address < end);
 }
 
+/*
+*	map_area_pmd()的反向操作
+*/
 static void unmap_area_pmd(pud_t *pud, unsigned long address,
 				  unsigned long size)
 {
@@ -77,12 +84,16 @@ static void unmap_area_pmd(pud_t *pud, unsigned long address,
 		end = PUD_SIZE;
 
 	do {
+		/*map_area_pte()的反向操作*/
 		unmap_area_pte(pmd, address, end - address);
 		address = (address + PMD_SIZE) & PMD_MASK;
 		pmd++;
 	} while (address < end);
 }
 
+/*
+*	map_area_pud()的反向操作
+*/
 static void unmap_area_pud(pgd_t *pgd, unsigned long address,
 			   unsigned long size)
 {
@@ -104,12 +115,16 @@ static void unmap_area_pud(pgd_t *pgd, unsigned long address,
 		end = PGDIR_SIZE;
 
 	do {
+		/*map_area_pmd()的反向操作*/
 		unmap_area_pmd(pud, address, end - address);
 		address = (address + PUD_SIZE) & PUD_MASK;
 		pud++;
 	} while (address && (address < end));
 }
 
+/*
+*	为页表中相应的表项分配所有的页框
+*/
 static int map_area_pte(pte_t *pte, unsigned long address,
 			       unsigned long size, pgprot_t prot,
 			       struct page ***pages)
@@ -122,11 +137,12 @@ static int map_area_pte(pte_t *pte, unsigned long address,
 		end = PMD_SIZE;
 
 	do {
+		/*将被映射的页框的页描述符地址page是从地址pages处的变量指向的数组项读得的*/
 		struct page *page = **pages;
 		WARN_ON(!pte_none(*pte));
 		if (!page)
 			return -ENOMEM;
-
+		/*通过set_pte和mk_pte,把新页框的物理地址写进页表*/
 		set_pte(pte, mk_pte(page, prot));
 		address += PAGE_SIZE;
 		pte++;
@@ -147,10 +163,16 @@ static int map_area_pmd(pmd_t *pmd, unsigned long address,
 	if (end > PUD_SIZE)
 		end = PUD_SIZE;
 
+	/*
+	*	循环结束的条件:指向非连续内存区的所有页表项全被建立
+	*	为页中间目录所指向的页表执行循环
+	*/
 	do {
+		/*分配一个新的页表,并更新页中间目录中相应的目录项*/
 		pte_t * pte = pte_alloc_kernel(&init_mm, pmd, base + address);
 		if (!pte)
 			return -ENOMEM;
+		/*为页表中相应的表项分配所有的页框*/
 		if (map_area_pte(pte, address, end - address, prot, pages))
 			return -ENOMEM;
 		address = (address + PMD_SIZE) & PMD_MASK;
@@ -160,10 +182,17 @@ static int map_area_pmd(pmd_t *pmd, unsigned long address,
 	return 0;
 }
 
+/*
+*	为新的页上级目录分配所有相关的页表
+*/
 static int map_area_pud(pud_t *pud, unsigned long address,
 			       unsigned long end, pgprot_t prot,
 			       struct page ***pages)
 {
+	/*
+	*	循环结束的条件:指向非连续内存区的所有页表项全被建立
+	*	为页上级目录所指向的页表执行循环
+	*/
 	do {
 		pmd_t *pmd = pmd_alloc(&init_mm, pud, address);
 		if (!pmd)
@@ -177,6 +206,11 @@ static int map_area_pud(pud_t *pud, unsigned long address,
 	return 0;
 }
 
+
+/*
+*	内存区本身的释放
+*	参数:struct vm_struct *area---指向内存区的vm_struct描述符的指针area
+*/
 void unmap_vm_area(struct vm_struct *area)
 {
 	unsigned long address = (unsigned long) area->addr;
@@ -185,12 +219,14 @@ void unmap_vm_area(struct vm_struct *area)
 	pgd_t *pgd;
 	int i;
 
+	/*map_vm_area()的反向操作*/
 	pgd = pgd_offset_k(address);
 	flush_cache_vunmap(address, end);
 	for (i = pgd_index(address); i <= pgd_index(end-1); i++) {
 		next = (address + PGDIR_SIZE) & PGDIR_MASK;
 		if (next <= address || next > end)
 			next = end;
+		/*map_area_pud()的反向操作*/
 		unmap_area_pud(pgd, address, next - address);
 		address = next;
 	        pgd++;
@@ -198,8 +234,20 @@ void unmap_vm_area(struct vm_struct *area)
 	flush_tlb_kernel_range((unsigned long) area->addr, end);
 }
 
+
+/*
+*	修改内核使用的页表项,
+*	参数:struct vm_struct *area---指向内存区的vm_struct描述符的指针
+*		     pgprot_t prot---已分配页框的保护位,总是被设置为0x63,对应着Present,Accessed,Read/Write及Dirty
+*		     struct page ***pages---指向一个指针数组的变量的地址,该指针数组的指针指向页描述符
+*	并不触及当前进程页表
+*/
 int map_vm_area(struct vm_struct *area, pgprot_t prot, struct page ***pages)
 {
+	/*
+	*	内存区的开始和末尾
+	*	area->size存放的是内存区的实际地址加上4KB内存之间的安全区间
+	*/
 	unsigned long address = (unsigned long) area->addr;
 	unsigned long end = address + (area->size-PAGE_SIZE);
 	unsigned long next;
@@ -207,9 +255,11 @@ int map_vm_area(struct vm_struct *area, pgprot_t prot, struct page ***pages)
 	int err = 0;
 	int i;
 
+	/*得到在主内核页全局目录中的目录项,对应于内存区其实线性地址*/
 	pgd = pgd_offset_k(address);
 	spin_lock(&init_mm.page_table_lock);
 	for (i = pgd_index(address); i <= pgd_index(end-1); i++) {
+		/*为新内存区创建一个页上级目录,并把它的物理地址写入内核页全局目录的合适表项*/
 		pud_t *pud = pud_alloc(&init_mm, pgd, address);
 		if (!pud) {
 			err = -ENOMEM;
@@ -218,12 +268,14 @@ int map_vm_area(struct vm_struct *area, pgprot_t prot, struct page ***pages)
 		next = (address + PGDIR_SIZE) & PGDIR_MASK;
 		if (next < address || next > end)
 			next = end;
+		/*为新的页上级目录分配所有相关的页表*/
 		if (map_area_pud(pud, address, next, prot, pages)) {
 			err = -ENOMEM;
 			break;
 		}
 
 		address = next;
+		/*页全局指针*/
 		pgd++;
 	}
 
@@ -253,6 +305,7 @@ struct vm_struct *__get_vm_area(unsigned long size, unsigned long flags,
 	}
 	addr = ALIGN(start, align);
 
+	/*为vm_struct 类型的新描述符获得一个内存区*/
 	area = kmalloc(sizeof(*area), GFP_KERNEL);
 	if (unlikely(!area))
 		return NULL;
@@ -267,6 +320,10 @@ struct vm_struct *__get_vm_area(unsigned long size, unsigned long flags,
 	}
 
 	write_lock(&vmlist_lock);
+	/*
+	*	扫描类型为vm_struct 的描述符链表来查找线性地址一个空闲区域,
+	*	至少覆盖size+4096个地址,4096是内存区之间的安全区间大小
+	*/
 	for (p = &vmlist; (tmp = *p) != NULL ;p = &tmp->next) {
 		if ((unsigned long)tmp->addr < addr) {
 			if((unsigned long)tmp->addr + tmp->size >= addr)
@@ -276,6 +333,7 @@ struct vm_struct *__get_vm_area(unsigned long size, unsigned long flags,
 		}
 		if ((size + addr) < addr)
 			goto out;
+		/*存在这样一个区间*/
 		if (size + addr <= (unsigned long)tmp->addr)
 			goto found;
 		addr = ALIGN(tmp->size + (unsigned long)tmp->addr, align);
@@ -295,6 +353,7 @@ found:
 	area->phys_addr = 0;
 	write_unlock(&vmlist_lock);
 
+	/*返回非连续内存描述符的起始地址(vm_struct *)*/
 	return area;
 
 out:
@@ -315,6 +374,12 @@ out:
  *	and reserved it for out purposes.  Returns the area descriptor
  *	on success or %NULL on failure.
  */
+
+/*
+*	在线性地址VMALLOC_START和VMALLOC_END之间查找一个空闲区域
+*	参数:unsigned long size---将被创建的内存区的字节的大小
+*		      unsigned long flags---指定空闲区类型的标志
+*/
 struct vm_struct *get_vm_area(unsigned long size, unsigned long flags)
 {
 	return __get_vm_area(size, flags, VMALLOC_START, VMALLOC_END);
@@ -329,6 +394,10 @@ struct vm_struct *get_vm_area(unsigned long size, unsigned long flags)
  *	This function returns the found VM area, but using it is NOT safe
  *	on SMP machines.
  */
+
+/*
+*	得到vm_struct描述符的地址area,并清除非连续内存区中的线性地址对应的内核的页表项
+*/
 struct vm_struct *remove_vm_area(void *addr)
 {
 	struct vm_struct **p, *tmp;
@@ -342,12 +411,18 @@ struct vm_struct *remove_vm_area(void *addr)
 	return NULL;
 
 found:
+	/*内存区本身的释放*/
 	unmap_vm_area(tmp);
 	*p = tmp->next;
 	write_unlock(&vmlist_lock);
 	return tmp;
 }
 
+/*
+*	vunmap()和vfree()的实质性工作
+*	参数:void *addr---将要释放的内存区的起始地址
+*		     int deallocate_pages---如果被映射到内存区页框分配器(调用vfree())中,则置位
+*/
 void __vunmap(void *addr, int deallocate_pages)
 {
 	struct vm_struct *area;
@@ -361,6 +436,7 @@ void __vunmap(void *addr, int deallocate_pages)
 		return;
 	}
 
+	/*得到vm_struct描述符的地址area,并清除非连续内存区中的线性地址对应的内核的页表项*/
 	area = remove_vm_area(addr);
 	if (unlikely(!area)) {
 		printk(KERN_ERR "Trying to vfree() nonexistent vm area (%p)\n",
@@ -368,22 +444,28 @@ void __vunmap(void *addr, int deallocate_pages)
 		WARN_ON(1);
 		return;
 	}
-	
+
+	/*
+	*	deallocate_pages被置位,函数扫描指向也描述符的area->pages指针数组;
+	*/
 	if (deallocate_pages) {
 		int i;
 
 		for (i = 0; i < area->nr_pages; i++) {
 			if (unlikely(!area->pages[i]))
 				BUG();
+			/*对每个数组元素释放页框到分区页框分配器*/
 			__free_page(area->pages[i]);
 		}
 
 		if (area->nr_pages > PAGE_SIZE/sizeof(struct page *))
 			vfree(area->pages);
 		else
+			/*释放数组本身*/
 			kfree(area->pages);
 	}
 
+	/*释放vm_struct描述符*/
 	kfree(area);
 	return;
 }
@@ -398,6 +480,10 @@ void __vunmap(void *addr, int deallocate_pages)
  *
  *	May not be called in interrupt context.
  */
+
+/*
+*	释放vmalloc()或vmalloc_32()创建的非连续内存区
+*/
 void vfree(void *addr)
 {
 	BUG_ON(in_interrupt());
@@ -416,6 +502,11 @@ EXPORT_SYMBOL(vfree);
  *
  *	May not be called in interrupt context.
  */
+
+/*
+*	释放vmap()创建的内存区
+*	参数:void *addr---将要释放的内存区的起始线性地址
+*/
 void vunmap(void *addr)
 {
 	BUG_ON(in_interrupt());
@@ -435,6 +526,11 @@ EXPORT_SYMBOL(vunmap);
  *	Maps @count pages from @pages into contiguous kernel virtual
  *	space.
  */
+
+/*
+*	Linux 2.6提供,映射非连续内存区中已经分配的页框
+*	与vmalloc()相似,但是不分配页框
+*/
 void *vmap(struct page **pages, unsigned int count,
 		unsigned long flags, pgprot_t prot)
 {
@@ -443,9 +539,11 @@ void *vmap(struct page **pages, unsigned int count,
 	if (count > num_physpages)
 		return NULL;
 
+	/*得到一个新vm_struct描述符*/
 	area = get_vm_area((count << PAGE_SHIFT), flags);
 	if (!area)
 		return NULL;
+	/*映射页框*/
 	if (map_vm_area(area, prot, &pages)) {
 		vunmap(area->addr);
 		return NULL;
@@ -473,10 +571,15 @@ void *__vmalloc(unsigned long size, int gfp_mask, pgprot_t prot)
 	struct page **pages;
 	unsigned int nr_pages, array_size, i;
 
+	/*将size设为4096(页框大小)的整数倍*/
 	size = PAGE_ALIGN(size);
 	if (!size || (size >> PAGE_SHIFT) > num_physpages)
 		return NULL;
 
+	/*
+	*	创建一个新的描述符,并返回分配给这个内存区的线性地址
+	*	该标志说明通过使用vmalloc()，非连续页框将被映射到一个线性地址区间
+	*/
 	area = get_vm_area(size, VM_ALLOC);
 	if (!area)
 		return NULL;
@@ -489,6 +592,7 @@ void *__vmalloc(unsigned long size, int gfp_mask, pgprot_t prot)
 	if (array_size > PAGE_SIZE)
 		pages = __vmalloc(array_size, gfp_mask, PAGE_KERNEL);
 	else
+		/*请求一组连续页框,这组连续页框足够包含一个页描述符指针数组*/
 		pages = kmalloc(array_size, (gfp_mask & ~__GFP_HIGHMEM));
 	area->pages = pages;
 	if (!area->pages) {
@@ -496,8 +600,13 @@ void *__vmalloc(unsigned long size, int gfp_mask, pgprot_t prot)
 		kfree(area);
 		return NULL;
 	}
+	/*将所有这些指针设为NULL*/
 	memset(area->pages, 0, array_size);
 
+	/*
+	*	重复调用alloc_page(),每一次为区间中nr_pages个页的每一个分配一个页框
+	*	并把对应页描述符的地址存放在area->pages数组中
+	*/
 	for (i = 0; i < area->nr_pages; i++) {
 		area->pages[i] = alloc_page(gfp_mask);
 		if (unlikely(!area->pages[i])) {
@@ -506,7 +615,13 @@ void *__vmalloc(unsigned long size, int gfp_mask, pgprot_t prot)
 			goto fail;
 		}
 	}
-	
+
+	/*
+	*	至此,已经得到了一个新的连续线性地址空间,
+	*	并且已经分配了一组非连续的页框来映射这些线性地址
+	*	接下来就是修改内核使用的页表项,以此表明分配给非连续内存区的每个页框现在对应着一个线性地址
+	*	这个线性地址被包含在vmalloc()产生的非连续线性地址空间中
+	*/
 	if (map_vm_area(area, prot, &pages))
 		goto fail;
 	return area->addr;
@@ -529,6 +644,12 @@ EXPORT_SYMBOL(__vmalloc);
  *	For tight cotrol over page level allocator and protection flags
  *	use __vmalloc() instead.
  */
+
+/*
+*	给内核分配一个非连续内存区
+*	参数:unsigned long size---所请求内存区的大小
+*	成功则返回新内存区的起始地址,否则是NULL指针
+*/
 void *vmalloc(unsigned long size)
 {
        return __vmalloc(size, GFP_KERNEL | __GFP_HIGHMEM, PAGE_KERNEL);
@@ -566,6 +687,10 @@ void *vmalloc_exec(unsigned long size)
  *	Allocate enough 32bit PA addressable pages to cover @size from the
  *	page level allocator and map them into contiguous kernel virtual space.
  */
+
+/*
+*	分配非连续内存区,但只能从ZONE_NORMAL和ZONE_DMA内存管理区中分配页框
+*/
 void *vmalloc_32(unsigned long size)
 {
 	return __vmalloc(size, GFP_KERNEL, PAGE_KERNEL);

@@ -9,15 +9,24 @@
 typedef void * (mempool_alloc_t)(int gfp_mask, void *pool_data);
 typedef void (mempool_free_t)(void *element, void *pool_data);
 
+/*内存池*/
 typedef struct mempool_s {
+	/*用来保护对象字段的自旋锁*/
 	spinlock_t lock;
+	/*内存池中元素的最大个数(存放了内存池中元素的初始个数)*/
 	int min_nr;		/* nr of elements at *elements */
+	/*当前内存池中元素的个数( <= min_nr)*/
 	int curr_nr;		/* Current nr of elements at *elements */
+	/*指向一个数组的指针，该数组由指向保留元素的指针组成(内存元素自身被一个指针数组引用，指针数组的地址存放在elements中)*/
 	void **elements;
 
+	/*池的拥有者可获得的私有数据*/
 	void *pool_data;
+	/*分配一个元素的方法*/
 	mempool_alloc_t *alloc;
+	/*释放一个元素的方法*/
 	mempool_free_t *free;
+	/*当内存池为空时使用的等待队列*/
 	wait_queue_head_t wait;
 } mempool_t;
 extern mempool_t * mempool_create(int min_nr, mempool_alloc_t *alloc_fn,

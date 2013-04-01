@@ -5,18 +5,29 @@
 #include <asm/page.h>		/* pgprot_t */
 
 /* bits in vm_struct->flags */
+/*使用ioremap()映射的硬件设备的板上的内存*/
 #define VM_IOREMAP	0x00000001	/* ioremap() and friends */
+/*使用vmalloc()得到的页*/
 #define VM_ALLOC	0x00000002	/* vmalloc() */
+/*使用vmap()映射的已经被分配的页*/
 #define VM_MAP		0x00000004	/* vmap()ed pages */
 /* bits [20..32] reserved for arch specific ioremap internals */
 
+/*非连续内存区*/
 struct vm_struct {
+	/*内存区内第一个内存单元的线性地址*/
 	void			*addr;
+	/*内存区的大小加4096(内存区之间的安全区间的大小)*/
 	unsigned long		size;
+	/*非连续内存区映射的内存的类型*/
 	unsigned long		flags;
+	/*指向nr_pages数组的指针，该数组由指向页描述符的指针组成*/
 	struct page		**pages;
+	/*内存区填充页的个数*/
 	unsigned int		nr_pages;
+	/*该字段设为0，除非内存已被创建映射一个硬件设备的I/O共享内存*/
 	unsigned long		phys_addr;
+	/*指向下一个vm_struct结构的指针*/
 	struct vm_struct	*next;
 };
 

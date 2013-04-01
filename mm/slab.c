@@ -499,6 +499,7 @@ static int slab_break_gfp_order = BREAK_GFP_ORDER_LO;
  * With kfree(), these are used to find the cache which an obj belongs to.
  */
 #define	SET_PAGE_CACHE(pg,x)  ((pg)->lru.next = (struct list_head *)(x))
+/*读取内存区所在的第一个页框描述符的lru.next,可确定出合适的高速缓存描述符*/
 #define	GET_PAGE_CACHE(pg)    ((kmem_cache_t *)(pg)->lru.next)
 #define	SET_PAGE_SLAB(pg,x)   ((pg)->lru.prev = (struct list_head *)(x))
 #define	GET_PAGE_SLAB(pg)     ((struct slab *)(pg)->lru.prev)
@@ -2359,8 +2360,12 @@ free_done:
 	}
 #endif
 	spin_unlock(&cachep->spinlock);
-	/*通过*/
+	/*通过减去被移到共享本地缓存或释放到slab分配器的对象的个数来更新本地高速缓存描述符的avail*/
 	ac->avail -= batchcount;
+	/*
+	*	移动本地高速缓存数组起始处的那个本地高速缓存上的所有指针
+	*	必须的.因为已经把第一个对象指针从本地高速缓存中删除,因此剩下的指针必须上移
+	*/
 	memmove(&ac_entry(ac)[0], &ac_entry(ac)[batchcount],
 			sizeof(void*)*ac->avail);
 }
@@ -2564,6 +2569,7 @@ EXPORT_SYMBOL(kmem_cache_alloc_node);
  */
 void * __kmalloc (size_t size, int flags)
 {
+	/*使用malloc_size表为所请求的大小分配最近的2的幂次方大小的内存*/
 	struct cache_sizes *csizep = malloc_sizes;
 
 	for (; csizep->cs_size; csizep++) {
@@ -2682,6 +2688,10 @@ EXPORT_SYMBOL(kcalloc);
  * Don't free memory not originally allocated by kmalloc()
  * or you will run into trouble.
  */
+
+/*
+*	kmalloc所获得的对象通过该函数释放
+*/
 void kfree (const void *objp)
 {
 	kmem_cache_t *c;
@@ -2692,6 +2702,7 @@ void kfree (const void *objp)
 	local_irq_save(flags);
 	kfree_debugcheck(objp);
 	c = GET_PAGE_CACHE(virt_to_page(objp));
+	/*释放相应内存区*/
 	__cache_free(c, (void*)objp);
 	local_irq_restore(flags);
 }

@@ -82,6 +82,10 @@ struct cache_sizes {
 extern struct cache_sizes malloc_sizes[];
 extern void *__kmalloc(size_t, int);
 
+/*
+*	如果对存储器的请求不频繁,就用一组普通高速缓存来处理,
+*	普通高速缓存中的对象具有几何分布的大小
+*/
 static inline void *kmalloc(size_t size, int flags)
 {
 	if (__builtin_constant_p(size)) {

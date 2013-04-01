@@ -684,6 +684,9 @@ extern void remove_shrinker(struct shrinker *shrinker);
  */
 #ifdef CONFIG_MMU
 #ifndef __ARCH_HAS_4LEVEL_HACK 
+/*
+*	为新内存区创建一个页上级目录,并把它的物理地址写入内核页全局目录的合适表项
+*/
 static inline pud_t *pud_alloc(struct mm_struct *mm, pgd_t *pgd, unsigned long address)
 {
 	if (pgd_none(*pgd))
