@@ -404,6 +404,7 @@ void __init prepare_namespace(void)
 
 	md_run_setup();
 
+	/*把root_device_name置为从启动参数"root"中获取的设备文件名*/
 	if (saved_root_name[0]) {
 		root_device_name = saved_root_name;
 		ROOT_DEV = name_to_dev_t(root_device_name);
@@ -411,6 +412,7 @@ void __init prepare_namespace(void)
 			root_device_name += 5;
 	}
 
+	/*把ROOT_DEV置为统一设备文件的主设备号和次设备号*/
 	is_floppy = MAJOR(ROOT_DEV) == FLOPPY_MAJOR;
 
 	if (initrd_load())
@@ -422,6 +424,7 @@ void __init prepare_namespace(void)
 	mount_root();
 out:
 	umount_devfs("/dev");
+	/*移动rootfs文件系统根目录上的已安装文件系统的安装点*/
 	sys_mount(".", "/", NULL, MS_MOVE, NULL);
 	sys_chroot(".");
 	security_sb_post_mountroot();

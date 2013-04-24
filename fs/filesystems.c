@@ -27,7 +27,9 @@
  *	Once the reference is obtained we can drop the spinlock.
  */
 
+/*所有文件系统类型的对象插入到一个单项链表中,指向链表的第一个元素*/
 static struct file_system_type *file_systems;
+/*读/写自旋锁保护整个链表免受同时访问*/
 static DEFINE_RWLOCK(file_systems_lock);
 
 /* WARNING: This can be used only if we _already_ own a reference */
@@ -62,7 +64,11 @@ static struct file_system_type **find_filesystem(const char *name)
  *	structures and must not be freed until the file system has been
  *	unregistered.
  */
- 
+
+/*
+*	注册编译时指定的每个文件系统
+*	把相应的file_system_type对象插入到文件系统类型的链表中
+*/
 int register_filesystem(struct file_system_type * fs)
 {
 	int res = 0;
@@ -214,6 +220,10 @@ int get_filesystem_list(char * buf)
 	return len;
 }
 
+/*
+*	扫描已注册的文件系统链表以查找文件系统的name字段
+*	并返回相应的file_system_type对象指针
+*/
 struct file_system_type *get_fs_type(const char *name)
 {
 	struct file_system_type *fs;

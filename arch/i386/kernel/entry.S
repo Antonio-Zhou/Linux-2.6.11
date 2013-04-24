@@ -247,16 +247,23 @@ sysenter_past_esp:
 ENTRY(system_call)
 	pushl %eax			# save orig_eax
 	SAVE_ALL
-	GET_THREAD_INFO(%ebp)
+	GET_THREAD_INFO(%ebp)		#ebx中存放当前进程的thread_info数据结构的地址
 					# system call tracing in operation
+	#检查是否有某一调试程序正在跟踪执行程序对系统调用的调用
 	testb $(_TIF_SYSCALL_TRACE|_TIF_SYSCALL_AUDIT),TI_flags(%ebp)
 	jnz syscall_trace_entry
+	#对用户态进程传递的系统调用哈进行有效性检查
 	cmpl $(nr_syscalls), %eax
 	jae syscall_badsys
 syscall_call:
+	#调用与eax中所包含的系统调用号对应的特定服务例程
+	#因为分派表中的每个表项占四个字节，因此把系统调用号乘以4,再加上分派表的起始地址
+	#然后从这个地质单元获取指向服务例程的指针，内核就找到了要调用的服务例程
 	call *sys_call_table(,%eax,4)
+	#结束时，从eax获得它的返回值，并把这个返回值存放在曾保护用户态eax寄存器值的那个栈单元的位置上
 	movl %eax,EAX(%esp)		# store the return value
 syscall_exit:
+	#关闭本地中断并检查当前进程的thread_info结构中的标志
 	cli				# make sure we don't miss an interrupt
 					# setting need_resched or sigpending
 					# between sampling and the iret
@@ -309,6 +316,7 @@ syscall_trace_entry:
 	movl $-ENOSYS,EAX(%esp)
 	movl %esp, %eax
 	xorl %edx,%edx
+	#在系统调用服务例程之前,停止current,并因此允许调试进程收集关于current的信息
 	call do_syscall_trace
 	movl ORIG_EAX(%esp), %eax
 	cmpl $(nr_syscalls), %eax
@@ -337,6 +345,7 @@ syscall_fault:
 
 	ALIGN
 syscall_badsys:
+	#将-ENOSYS存放在eax中，调用resume_userspace，这样进程恢复它在用户态的执行时，会在eax中发现一个负的返回码
 	movl $-ENOSYS,EAX(%esp)
 	jmp resume_userspace
 

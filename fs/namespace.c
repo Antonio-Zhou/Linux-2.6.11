@@ -366,6 +366,7 @@ void umount_tree(struct vfsmount *mnt)
 
 static int do_umount(struct vfsmount *mnt, int flags)
 {
+	/*从安装文件系统对象的mnt_sb字段检索超级块对象sb的地址*/
 	struct super_block * sb = mnt->mnt_sb;
 	int retval;
 
@@ -400,7 +401,8 @@ static int do_umount(struct vfsmount *mnt, int flags)
 	 * must return, and the like. Thats for the mount program to worry
 	 * about for the moment.
 	 */
-
+	
+	/*用户要求强制卸载操作,*/
 	lock_kernel();
 	if( (flags&MNT_FORCE) && sb->s_op->umount_begin)
 		sb->s_op->umount_begin(sb);
@@ -420,6 +422,8 @@ static int do_umount(struct vfsmount *mnt, int flags)
 		 * Special case for "unmounting" root ...
 		 * we just try to remount it readonly.
 		 */
+	
+		/*要卸载的是根文件系统,且用户并不要求真正把它卸载下来*/
 		down_write(&sb->s_umount);
 		if (!(sb->s_flags & MS_RDONLY)) {
 			lock_kernel();
@@ -445,6 +449,7 @@ static int do_umount(struct vfsmount *mnt, int flags)
 		spin_lock(&vfsmount_lock);
 	}
 	retval = -EBUSY;
+	/*已安装文件系统不包含任何子安装文件系统的安装点,或用户要求强制卸载文件系统*/
 	if (atomic_read(&mnt->mnt_count) == 2 || flags & MNT_DETACH) {
 		if (!list_empty(&mnt->mnt_list))
 			umount_tree(mnt);
@@ -465,21 +470,29 @@ static int do_umount(struct vfsmount *mnt, int flags)
  * unixes. Our API is identical to OSF/1 to avoid making a mess of AMD
  */
 
+/*
+*	卸载文件系统
+*/
 asmlinkage long sys_umount(char __user * name, int flags)
 {
 	struct nameidata nd;
 	int retval;
 
+	/*查找按转点路径名*/
 	retval = __user_walk(name, LOOKUP_FOLLOW, &nd);
 	if (retval)
 		goto out;
 	retval = -EINVAL;
+
+	/*查找的最终目录不是文件系统的安装点*/
 	if (nd.dentry != nd.mnt->mnt_root)
 		goto dput_and_out;
+	/*要卸载的文件系统还没有安装在命名空间中*/
 	if (!check_mnt(nd.mnt))
 		goto dput_and_out;
 
 	retval = -EPERM;
+	/*用户不具有卸载文件系统的特权*/
 	if (!capable(CAP_SYS_ADMIN))
 		goto dput_and_out;
 
@@ -760,6 +773,10 @@ out:
  * create a new mount for userspace and request it to be added into the
  * namespace's tree
  */
+
+/*
+*	用户要求安装一个特殊文件系统或存放在磁盘分区中的普通文件系统时,
+*/
 static int do_new_mount(struct nameidata *nd, char *type, int flags,
 			int mnt_flags, char *name, void *data)
 {
@@ -772,6 +789,7 @@ static int do_new_mount(struct nameidata *nd, char *type, int flags,
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 
+	/*处理实际的安装操作*/
 	mnt = do_kern_mount(type, flags, name, data);
 	if (IS_ERR(mnt))
 		return PTR_ERR(mnt);
@@ -787,17 +805,24 @@ int do_add_mount(struct vfsmount *newmnt, struct nameidata *nd,
 		 int mnt_flags, struct list_head *fslist)
 {
 	int err;
-
+	
+	/*要改变namespace结构*/
 	down_write(&current->namespace->sem);
 	/* Something was mounted here while we slept */
 	while(d_mountpoint(nd->dentry) && follow_down(&nd->mnt, &nd->dentry))
 		;
 	err = -EINVAL;
+	
+	/*验证在该安装点上最近安装的文件系统是否仍指向当前的namespace*/
 	if (!check_mnt(nd->mnt))
 		goto unlock;
 
 	/* Refuse the same filesystem on the same mount point */
 	err = -EBUSY;
+	/*
+	*	要安装的文件系统已经被安装在由系统调用的参数所指定的安装点上
+	*	或该安装点是一个符号链接
+	*/
 	if (nd->mnt->mnt_sb == newmnt->mnt_sb &&
 	    nd->mnt->mnt_root == nd->dentry)
 		goto unlock;
@@ -806,7 +831,9 @@ int do_add_mount(struct vfsmount *newmnt, struct nameidata *nd,
 	if (S_ISLNK(newmnt->mnt_root->d_inode->i_mode))
 		goto unlock;
 
+	/*初始化新安装文件系统对象的mnt_flags*/
 	newmnt->mnt_flags = mnt_flags;
+	/*把新安装的文件系统对象插到namespace链表,散列表以及父文件系统的子链表中*/
 	err = graft_tree(newmnt, nd);
 
 	if (err == 0 && fslist) {
@@ -1005,6 +1032,10 @@ int copy_mount_options(const void __user *data, unsigned long *where)
  * Therefore, if this magic number is present, it carries no information
  * and must be discarded.
  */
+
+/*
+*	执行真正的安装操作
+*/
 long do_mount(char * dev_name, char * dir_name, char *type_page,
 		  unsigned long flags, void *data_page)
 {
@@ -1027,6 +1058,10 @@ long do_mount(char * dev_name, char * dir_name, char *type_page,
 		((char *)data_page)[PAGE_SIZE - 1] = 0;
 
 	/* Separate the per-mountpoint flags */
+	/*
+	*	如果安装标志MS_NOSUID,MS_NODEV,MS_NOEXEC中任一个被设置,则清除它们,
+	*	并在已安装文件系统对象中设置相应的标志
+	*/
 	if (flags & MS_NOSUID)
 		mnt_flags |= MNT_NOSUID;
 	if (flags & MS_NODEV)
@@ -1036,6 +1071,7 @@ long do_mount(char * dev_name, char * dir_name, char *type_page,
 	flags &= ~(MS_NOSUID|MS_NOEXEC|MS_NODEV|MS_ACTIVE);
 
 	/* ... and get the mountpoint */
+	/*查找安装点的路径名,nd存放了查找到的路径名*/
 	retval = path_lookup(dir_name, LOOKUP_FOLLOW, &nd);
 	if (retval)
 		return retval;
@@ -1043,18 +1079,24 @@ long do_mount(char * dev_name, char * dir_name, char *type_page,
 	retval = security_sb_mount(dev_name, &nd, type_page, flags, data_page);
 	if (retval)
 		goto dput_out;
+	/*检查安装标志以决定必须做什么*/
 
+	/*MS_REMOUNT--改变超级块对象s_flags的安装标志以及已安装文件系统对象mmt_flags字段的安装文件系统标志*/
 	if (flags & MS_REMOUNT)
 		retval = do_remount(&nd, flags & ~MS_REMOUNT, mnt_flags,
 				    data_page);
+	/*MS_BIND---用户要求在系统目录树的另外一个安装点上的文件或目录能够可见*/
 	else if (flags & MS_BIND)
 		retval = do_loopback(&nd, dev_name, flags & MS_REC);
+	/*MS_MOVE---用户要求改变已安装文件系统的安装点*/
 	else if (flags & MS_MOVE)
 		retval = do_move_mount(&nd, dev_name);
+	/*最普通的情况,*/
 	else
 		retval = do_new_mount(&nd, type_page, flags, mnt_flags,
 				      dev_name, data_page);
 dput_out:
+	/*终止安装点的路径名查找*/
 	path_release(&nd);
 	return retval;
 }
@@ -1145,6 +1187,15 @@ out:
 	return -ENOMEM;
 }
 
+/*
+*	安装一个普通文件系统
+*	参数:	char __user * dev_name---文件系统所在的设备文件的路径名,不需要为NULL
+*			char __user * dir_name---文件系统被安装其上的某个目录的目录路径名(安装点)
+*			char __user * type---文件系统的类型.必须是已注册文件系统的名字
+*			unsigned long flags---安装标志
+*			void __user * data---指向一个与文件系统相关的数据结构的指针
+*	把参数的值拷贝到临时内核缓冲区,获取大内核锁,并调用do_mount()
+*/
 asmlinkage long sys_mount(char __user * dev_name, char __user * dir_name,
 			  char __user * type, unsigned long flags,
 			  void __user * data)
@@ -1364,9 +1415,11 @@ static void __init init_mount_tree(void)
 	struct namespace *namespace;
 	struct task_struct *g, *p;
 
+	/*把字符串"rootfs"作为fs类型参数传递给它,函数返回新安装fs描述符地址*/
 	mnt = do_kern_mount("rootfs", 0, "rootfs", NULL);
 	if (IS_ERR(mnt))
 		panic("Can't create rootfs");
+	/*为进程0的命名空间分配一个namespace对象,并将它插入到do_kern_mount()返回的已安装文件系统描述符中*/
 	namespace = kmalloc(sizeof(*namespace), GFP_KERNEL);
 	if (!namespace)
 		panic("Can't allocate initial namespace");
@@ -1379,12 +1432,14 @@ static void __init init_mount_tree(void)
 
 	init_task.namespace = namespace;
 	read_lock(&tasklist_lock);
+	/*系统中其他每个进程的namespce设置为namespace对象的地址*/
 	do_each_thread(g, p) {
 		get_namespace(namespace);
 		p->namespace = namespace;
 	} while_each_thread(g, p);
 	read_unlock(&tasklist_lock);
 
+	/*将进程0的根目录和当前工作目录设置为根fs*/
 	set_fs_pwd(current->fs, namespace->root, namespace->root->mnt_root);
 	set_fs_root(current->fs, namespace->root, namespace->root->mnt_root);
 }

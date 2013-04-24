@@ -217,6 +217,8 @@ static struct file_system_type ramfs_fs_type = {
 	.get_sb		= ramfs_get_sb,
 	.kill_sb	= kill_litter_super,
 };
+
+/*rootfs类型定义*/
 static struct file_system_type rootfs_fs_type = {
 	.name		= "rootfs",
 	.get_sb		= rootfs_get_sb,
@@ -236,6 +238,9 @@ static void __exit exit_ramfs_fs(void)
 module_init(init_ramfs_fs)
 module_exit(exit_ramfs_fs)
 
+/*
+*	注册特殊fs类型rootfs
+*/
 int __init init_rootfs(void)
 {
 	return register_filesystem(&rootfs_fs_type);

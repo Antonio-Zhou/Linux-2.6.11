@@ -601,6 +601,8 @@ struct file {
 #endif /* #ifdef CONFIG_EPOLL */
 	struct address_space	*f_mapping;
 };
+
+/*保护超级块的s_files链表避免受多处理器系统上的同时访问*/
 extern spinlock_t files_lock;
 #define file_list_lock() spin_lock(&files_lock);
 #define file_list_unlock() spin_unlock(&files_lock);
@@ -746,7 +748,9 @@ extern int send_sigurg(struct fown_struct *fown);
 #define MNT_DETACH	0x00000002	/* Just detach from the tree */
 #define MNT_EXPIRE	0x00000004	/* Mark for expiry */
 
+/*超级块对象链表的第一个元素*/
 extern struct list_head super_blocks;
+/*保护链表避免受多处理器系统上的同时访问*/
 extern spinlock_t sb_lock;
 
 #define sb_entry(list)	list_entry((list), struct super_block, s_list)

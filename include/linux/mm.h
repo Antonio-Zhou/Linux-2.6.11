@@ -755,6 +755,14 @@ extern unsigned long do_mmap_pgoff(struct file *file, unsigned long addr,
 	unsigned long len, unsigned long prot,
 	unsigned long flag, unsigned long pgoff);
 
+/*
+*	为当前进程创建初始化一个新的线性区.分配成功后,可以把这个 新的线性区与进程已有的其他线性区进行合并
+*	参数:struct file *file, unsigned long offset---如果新的线性区将把一个文件映射到内存,则使用文件描述符指针file和文件偏移量offset
+*		     unsigned long addr---指定从何处开始查找一个空闲的区间
+*		     unsigned long len---线性地址区间的长度
+*		     unsigned long prot---指定这个线性区所包含页的访问权限
+*		     unsigned long flag---指定线性区的其他标志
+*/
 static inline unsigned long do_mmap(struct file *file, unsigned long addr,
 	unsigned long len, unsigned long prot,
 	unsigned long flag, unsigned long offset)
@@ -813,10 +821,20 @@ extern struct vm_area_struct * find_vma_prev(struct mm_struct * mm, unsigned lon
 
 /* Look up the first VMA which intersects the interval start_addr..end_addr-1,
    NULL if none.  Assume start_addr < end_addr. */
+
+/*
+*	查找与给定的线性地址区间相重叠的第一个线性区
+*	参数:struct mm_struct * mm---指向进程的内存描述符
+*		      unsigned long start_addr,unsigned long end_addr---指定这个区间
+*/
 static inline struct vm_area_struct * find_vma_intersection(struct mm_struct * mm, unsigned long start_addr, unsigned long end_addr)
 {
 	struct vm_area_struct * vma = find_vma(mm,start_addr);
 
+	/*
+	*	vma不存在,
+	*	或者所找到的线性区是从这个线性地址区间的末尾开始的
+	*/
 	if (vma && end_addr <= vma->vm_start)
 		vma = NULL;
 	return vma;

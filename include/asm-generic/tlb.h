@@ -93,6 +93,7 @@ tlb_finish_mmu(struct mmu_gather *tlb, unsigned long start, unsigned long end)
 	if (rss < freed)
 		freed = rss;
 	mm->rss = rss - freed;
+	/*Ë¢ÐÂTLB*/
 	tlb_flush_mmu(tlb, start, end);
 
 	/* keep the page table cache within bounds */

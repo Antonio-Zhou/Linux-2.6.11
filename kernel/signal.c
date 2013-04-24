@@ -153,6 +153,13 @@ static kmem_cache_t *sigqueue_cachep;
 	(!T(signr, SIG_KERNEL_IGNORE_MASK|SIG_KERNEL_STOP_MASK) && \
 	 (t)->sighand->action[(signr)-1].sa.sa_handler == SIG_DFL)
 
+/*
+*	检查进程是否忽略信号
+*	三个忽略信号的条件:
+*			1.进程没有被跟踪
+*			2.信号没有被阻塞
+*			3.显式的忽略信号(sa_handler==SIG_IGN),或者隐式地忽略信号
+*/
 static int sig_ignored(struct task_struct *t, int sig)
 {
 	void __user * handler;
@@ -581,10 +588,15 @@ int dequeue_signal(struct task_struct *tsk, sigset_t *mask, siginfo_t *info)
  * No need to set need_resched since signal event passing
  * goes through ->blocked
  */
+
+/*
+*	通知进程有新的挂起信号
+*/
 void signal_wake_up(struct task_struct *t, int resume)
 {
 	unsigned int mask;
 
+	/*t->thread_info->flags的TIF_SIGPENDING置位*/
 	set_tsk_thread_flag(t, TIF_SIGPENDING);
 
 	/*
@@ -594,6 +606,7 @@ void signal_wake_up(struct task_struct *t, int resume)
 	 * By using wake_up_state, we ensure the process will wake up and
 	 * handle its death signal.
 	 */
+	 /**/
 	mask = TASK_INTERRUPTIBLE;
 	if (resume)
 		mask |= TASK_STOPPED | TASK_TRACED;
@@ -632,6 +645,7 @@ static int check_kill_permission(int sig, struct siginfo *info,
 				 struct task_struct *t)
 {
 	int error = -EINVAL;
+	/*检查sig是否正确*/
 	if (sig < 0 || sig > _NSIG)
 		return error;
 	error = -EPERM;
@@ -662,19 +676,24 @@ static void handle_stop_signal(int sig, struct task_struct *p)
 {
 	struct task_struct *t;
 
+	/*线程组正在被杀死*/
 	if (p->flags & SIGNAL_GROUP_EXIT)
 		/*
 		 * The process is in the middle of dying already.
 		 */
 		return;
 
+	/*sig是SIGSTOP,SIGTSTP,SIGTTIN或SIGTTOU*/
 	if (sig_kernel_stop(sig)) {
 		/*
 		 * This is a stop signal.  Remove SIGCONT from all queues.
 		 */
+		 
+		 /*从共享挂起信号队列p->signal->shared_pending*/
 		rm_from_queue(sigmask(SIGCONT), &p->signal->shared_pending);
 		t = p;
 		do {
+			/*线程组所有成员的私有信号队列中删除SIGCONT信号*/
 			rm_from_queue(sigmask(SIGCONT), &t->pending);
 			t = next_thread(t);
 		} while (t != p);
@@ -736,6 +755,7 @@ static void handle_stop_signal(int sig, struct task_struct *p)
 			}
 			wake_up_state(t, state);
 
+			/*返回线程组中不同轻量级进程描述符地址*/
 			t = next_thread(t);
 		} while (t != p);
 
@@ -773,6 +793,13 @@ static void handle_stop_signal(int sig, struct task_struct *p)
 	}
 }
 
+/*
+*	在挂起信号队列中插入一个新元素
+*	参数:	int sig---信号编号
+*			struct siginfo *info---siginfo_t数据结构的地址
+*			struct task_struct *t---目标进程描述符地址
+*			struct sigpending *signals---挂起信号队列的地址signals
+*/
 static int send_signal(int sig, struct siginfo *info, struct task_struct *t,
 			struct sigpending *signals)
 {
@@ -783,6 +810,11 @@ static int send_signal(int sig, struct siginfo *info, struct task_struct *t,
 	 * fast-pathed signals for kernel-internal things like SIGSTOP
 	 * or SIGKILL.
 	 */
+	 
+	 /*
+	 *	信号是SIGKILL或SIGSTOP,而且已由内核通过force_sig_specific()函数产生
+	 *	此时,内核立即强制执行与这些信号相关的操作,函数不用把信号添加到挂起信号队列中
+	*/
 	if ((unsigned long)info == 2)
 		goto out_set;
 
@@ -794,9 +826,12 @@ static int send_signal(int sig, struct siginfo *info, struct task_struct *t,
 	   make sure at least one signal gets delivered and don't
 	   pass on the info struct.  */
 
+	/*为新出现的信号分配sigqueue数据结构*/
 	q = __sigqueue_alloc(t, GFP_ATOMIC);
 	if (q) {
+		/*递增拥有者挂起信号的数量和t->user所指向的per用户数据结构的引用计数器*/
 		list_add_tail(&q->list, &signals->list);
+		/*在sigqueue数据结构中填充表siginfo_t*/
 		switch ((unsigned long) info) {
 		case 0:
 			q->info.si_signo = sig;
@@ -813,10 +848,15 @@ static int send_signal(int sig, struct siginfo *info, struct task_struct *t,
 			q->info.si_uid = 0;
 			break;
 		default:
+			/*复制由调用者传递的siginfo_t表*/
 			copy_siginfo(&q->info, info);
 			break;
 		}
 	} else {
+		/*
+		*	不再向信号挂起队列中增加元素
+		*	对判断条件的理解不好??????????????????????
+		*/
 		if (sig >= SIGRTMIN && info && (unsigned long)info != 1
 		   && info->si_code != SI_USER)
 		/*
@@ -833,19 +873,33 @@ static int send_signal(int sig, struct siginfo *info, struct task_struct *t,
 	}
 
 out_set:
+	/*把队列位掩码中与信号相对应的位置1*/
 	sigaddset(&signals->signal, sig);
+	/*返回0,说明信号已成功追加到挂起信号队列中*/
 	return ret;
 }
 
+/*
+*	检查信号是否是非实时的,并且在线程组的共享挂起信号队列中已经有另外一个相同的信号
+*/
 #define LEGACY_QUEUE(sigptr, sig) \
 	(((sig) < SIGRTMIN) && sigismember(&(sigptr)->signal, (sig)))
 
-
+/*
+*	向指定进程发送信号
+*	参数:	int sig---信号编号
+*			struct siginfo *info---或者是siginfo_t表的地址,或者是三个特殊值中的一个
+*								0---信号是由用户态进程发送的
+*								1---由内核发送的
+*								2---由内核发送的SIGSTOP或SIGKILL信号
+*			struct task_struct *t---指向目标进程描述符的指针
+*/
 static int
 specific_send_sig_info(int sig, struct siginfo *info, struct task_struct *t)
 {
 	int ret = 0;
 
+	/*在关本地中断和已获得t->sighand->siglock下执行步骤*/
 	if (!irqs_disabled())
 		BUG();
 	assert_spin_locked(&t->sighand->siglock);
@@ -857,17 +911,28 @@ specific_send_sig_info(int sig, struct siginfo *info, struct task_struct *t)
 		ret = info->si_sys_private;
 
 	/* Short-circuit ignored signals.  */
+	/*检查进程是否忽略信号*/
 	if (sig_ignored(t, sig))
 		goto out;
 
 	/* Support queueing exactly one non-rt signal, so that we
 	   can get more detailed information about the cause of
 	   the signal. */
+	 /*
+	 *	检查信号是否是非实时的(sig<32),
+	 *	而且是否在进程私有挂起信号队列上已经有另外一个相同的挂起信号
+	*/
 	if (LEGACY_QUEUE(&t->pending, sig))
 		goto out;
 
+	/*把信号加到进程的挂起信号集合中*/
 	ret = send_signal(sig, info, t, &t->pending);
+	/*
+	*	send_signal()成功结束
+	*	信号不被阻塞
+	*/
 	if (!ret && !sigismember(&t->blocked, sig))
+		/*通知进程有新的挂起信号*/
 		signal_wake_up(t, sig == SIGKILL);
 out:
 	return ret;
@@ -925,6 +990,9 @@ force_sig_specific(int sig, struct task_struct *t)
 	 && (task_curr(p) || !signal_pending(p)))
 
 
+/*
+*	扫描线程组中的进程,查找能接收新信号的进程,
+*/
 static void
 __group_complete_signal(int sig, struct task_struct *p)
 {
@@ -1043,6 +1111,7 @@ __group_send_sig_info(int sig, struct siginfo *info, struct task_struct *p)
 	int ret = 0;
 
 	assert_spin_locked(&p->sighand->siglock);
+	/*检查信号的某些类型,这些类型可能使目标线程组得到其他挂起信号无效*/
 	handle_stop_signal(sig, p);
 
 	if (((unsigned long)info > 2) && (info->si_code == SI_TIMER))
@@ -1052,9 +1121,11 @@ __group_send_sig_info(int sig, struct siginfo *info, struct task_struct *p)
 		ret = info->si_sys_private;
 
 	/* Short-circuit ignored signals.  */
+	/*检查进程是否忽略信号*/
 	if (sig_ignored(p, sig))
 		return ret;
 
+	/*检查信号是否是非实时的,并且在线程组的共享挂起信号队列中已经有另外一个相同的信号*/
 	if (LEGACY_QUEUE(&p->signal->shared_pending, sig))
 		/* This is a non-RT signal and we already have one queued.  */
 		return ret;
@@ -1064,10 +1135,13 @@ __group_send_sig_info(int sig, struct siginfo *info, struct task_struct *p)
 	 * We always use the shared queue for process-wide signals,
 	 * to avoid several races.
 	 */
+
+	/*把信号添加到共享挂起信号队列中*/
 	ret = send_signal(sig, info, p, &p->signal->shared_pending);
 	if (unlikely(ret))
 		return ret;
 
+	/*唤醒线程组中的一个轻量级进程*/
 	__group_complete_signal(sig, p);
 	return 0;
 }
@@ -1113,12 +1187,23 @@ void zap_other_threads(struct task_struct *p)
 /*
  * Must be called with the tasklist_lock held for reading!
  */
+
+/*
+*	向整个线程组发送信号
+*	参数:	int sig---信号编号
+*			struct siginfo *info---意义同sepcific_send_sig_info()
+*			struct task_struct *p---进程描述符地址
+*/
 int group_send_sig_info(int sig, struct siginfo *info, struct task_struct *p)
 {
 	unsigned long flags;
 	int ret;
 
 	ret = check_kill_permission(sig, info, p);
+	/*
+	*	sig == 0,则不产生任何信号
+	*	0是无效的信号编码,用于让发送进程检查它是否有向目标线程组发送信号所必需的特权 	
+	*/
 	if (!ret && sig && p->sighand) {
 		spin_lock_irqsave(&p->sighand->siglock, flags);
 		ret = __group_send_sig_info(sig, info, p);
@@ -1189,6 +1274,7 @@ kill_proc_info(int sig, struct siginfo *info, pid_t pid)
 static int kill_something_info(int sig, struct siginfo *info, int pid)
 {
 	if (!pid) {
+		/*通过group_sed_sig_info向一个单独的线程组发送信号*/
 		return kill_pg_info(sig, info, process_group(current));
 	} else if (pid == -1) {
 		int retval = 0, count = 0;
@@ -1197,6 +1283,7 @@ static int kill_something_info(int sig, struct siginfo *info, int pid)
 		read_lock(&tasklist_lock);
 		for_each_process(p) {
 			if (p->pid > 1 && p->tgid != current->tgid) {
+				/*pid == -1*/
 				int err = group_send_sig_info(sig, info, p);
 				++count;
 				if (err != -EPERM)
@@ -1206,6 +1293,7 @@ static int kill_something_info(int sig, struct siginfo *info, int pid)
 		read_unlock(&tasklist_lock);
 		return count ? retval : -ESRCH;
 	} else if (pid < 0) {
+		/*扫描目标进程组的所有进程.并为目标进程组中的每个进程调用send_sig_info*/
 		return kill_pg_info(sig, info, -pid);
 	} else {
 		return kill_proc_info(sig, info, pid);
@@ -1587,6 +1675,7 @@ static void ptrace_stop(int exit_code, int nostop_code, siginfo_t *info)
 		   !(current->ptrace & PT_ATTACHED)) &&
 	    (likely(current->parent->signal != current->signal) ||
 	     !unlikely(current->signal->flags & SIGNAL_GROUP_EXIT))) {
+	     /*在current接收进程正受到其他一些进程的监控,让监控程序知道进程的信号处理*/
 		do_notify_parent_cldstop(current, current->parent,
 					 CLD_TRAPPED);
 		read_unlock(&tasklist_lock);
@@ -1671,6 +1760,11 @@ finish_stop(int stop_count)
  * Returns nonzero if we've actually stopped and released the siglock.
  * Returns zero if we didn't stop and still hold the siglock.
  */
+
+/*
+*	检查current是否是线程组中第一个被停止的进程
+*	如果是,激活"组停止"
+*/
 static int
 do_signal_stop(int signr)
 {
@@ -1861,13 +1955,19 @@ relock:
 			}
 		}
 
+		/*要处理信号的k_sigaction*/
 		ka = &current->sighand->action[signr-1];
+		/*忽略信号*/
 		if (ka->sa.sa_handler == SIG_IGN) /* Do nothing.  */
 			continue;
 		if (ka->sa.sa_handler != SIG_DFL) {
 			/* Run the handler.  */
 			*return_ka = *ka;
 
+			/*
+			*	如果所接收信号的SA_ONESHOT被置位,重新设置它的缺省操作
+			*	以便同一信号夫人再次出现不会再次出发这一信号处理程序的执行
+			*/
 			if (ka->sa.sa_flags & SA_ONESHOT)
 				ka->sa.sa_handler = SIG_DFL;
 
@@ -1877,10 +1977,12 @@ relock:
 		/*
 		 * Now we are doing the default action for this signal.
 		 */
+		 /*信号的缺省操作*/
 		if (sig_kernel_ignore(signr)) /* Default is nothing. */
 			continue;
 
 		/* Init gets no signals it doesn't want.  */
+		/*init进程时,信号被丢弃*/
 		if (current->pid == 1)
 			continue;
 
@@ -1906,6 +2008,7 @@ relock:
 				spin_lock_irq(&current->sighand->siglock);
 			}
 
+			/*检查current是否是线程组中第一个被停止的进程*/
 			if (likely(do_signal_stop(signr))) {
 				/* It released the siglock.  */
 				goto relock;
@@ -1939,6 +2042,7 @@ relock:
 		/*
 		 * Death signals, no core dump.
 		 */
+		 /*Terminate---杀死线程组,执行彻底的"组退出"过程*/
 		do_group_exit(signr);
 		/* NOTREACHED */
 	}
@@ -2227,11 +2331,19 @@ sys_rt_sigtimedwait(const sigset_t __user *uthese,
 	return ret;
 }
 
+/*
+*	kill系统调用的服务例程,向普通进程或多线程应用发送信号
+*	pid > 0 ---把sig信号发送到其PID等于pid的进程所属的线程组
+*	pid = 0 ---把sig信号发送到与调用进程同组的进程的所有线程组
+*	pid = -1---把信号发送到所有进程,除了swapper(PID 0),init(PID 1)和current之外
+*	pid < -1---把sig信号发送到进程组-pid中进程的所有线程组
+*/
 asmlinkage long
 sys_kill(int pid, int sig)
 {
 	struct siginfo info;
 
+	/*为信号建立最小的siginfo_t表*/
 	info.si_signo = sig;
 	info.si_errno = 0;
 	info.si_code = SI_USER;
@@ -2270,6 +2382,7 @@ asmlinkage long sys_tgkill(int tgid, int pid, int sig)
 	read_lock(&tasklist_lock);
 	p = find_task_by_pid(pid);
 	error = -ESRCH;
+	/*还要检查信号接收进程是否确实属于线程组*/
 	if (p && (p->tgid == tgid)) {
 		error = check_kill_permission(sig, &info, p);
 		/*
@@ -2290,6 +2403,10 @@ asmlinkage long sys_tgkill(int tgid, int pid, int sig)
 /*
  *  Send a signal to only one task, even if it's a CLONE_THREAD task.
  */
+
+/*
+*	向线程组中的指定进程发送信号
+*/
 asmlinkage long
 sys_tkill(int pid, int sig)
 {
@@ -2301,6 +2418,7 @@ sys_tkill(int pid, int sig)
 	if (pid <= 0)
 		return -EINVAL;
 
+	/*为siginfo表赋值*/
 	info.si_signo = sig;
 	info.si_errno = 0;
 	info.si_code = SI_TKILL;
@@ -2308,9 +2426,11 @@ sys_tkill(int pid, int sig)
 	info.si_uid = current->uid;
 
 	read_lock(&tasklist_lock);
+	/*获取进程描述符地址*/
 	p = find_task_by_pid(pid);
 	error = -ESRCH;
 	if (p) {
+		/*许可性检查*/
 		error = check_kill_permission(sig, &info, p);
 		/*
 		 * The null signal is a permissions and process existence
@@ -2319,6 +2439,7 @@ sys_tkill(int pid, int sig)
 		if (!error && sig && p->sighand) {
 			spin_lock_irq(&p->sighand->siglock);
 			handle_stop_signal(sig, p);
+			/*发送信号*/
 			error = specific_send_sig_info(sig, &info, p);
 			spin_unlock_irq(&p->sighand->siglock);
 		}
@@ -2494,6 +2615,12 @@ sys_sigpending(old_sigset_t __user *set)
 /* Some platforms have their own version with special arguments others
    support only sys_rt_sigprocmask.  */
 
+/*
+*	允许进程修改阻塞信号的集合,只应用于常规信号(非实时信号)
+*	参数:	int how---一个标志
+			old_sigset_t __user *set---进程地址空间的一个指针,指向存放以前位掩码的一个位数组
+*			old_sigset_t __user *oset---进程地址空间的一个指针,指向存放新位掩码的位数组
+*/
 asmlinkage long
 sys_sigprocmask(int how, old_sigset_t __user *set, old_sigset_t __user *oset)
 {
@@ -2502,6 +2629,7 @@ sys_sigprocmask(int how, old_sigset_t __user *set, old_sigset_t __user *oset)
 
 	if (set) {
 		error = -EFAULT;
+		/*把set参数所指向的值拷贝到局部变量new_set中*/
 		if (copy_from_user(&new_set, set, sizeof(*set)))
 			goto out;
 		new_set &= ~(sigmask(SIGKILL) | sigmask(SIGSTOP));
@@ -2514,12 +2642,15 @@ sys_sigprocmask(int how, old_sigset_t __user *set, old_sigset_t __user *oset)
 		default:
 			error = -EINVAL;
 			break;
+			/**set位掩码数组,指定必须加到阻塞信号的位掩码数组中的信号*/
 		case SIG_BLOCK:
 			sigaddsetmask(&current->blocked, new_set);
 			break;
+			/**set位掩码数组,指定必须从阻塞信号的位掩码数组中删除的信号*/
 		case SIG_UNBLOCK:
 			sigdelsetmask(&current->blocked, new_set);
 			break;
+			/**set位掩码数组,指定必须阻塞信号新的位掩码数组*/
 		case SIG_SETMASK:
 			current->blocked.sig[0] = new_set;
 			break;

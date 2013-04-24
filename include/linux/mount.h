@@ -75,6 +75,7 @@ extern int do_add_mount(struct vfsmount *newmnt, struct nameidata *nd,
 
 extern void mark_mounts_for_expiry(struct list_head *mounts);
 
+/*保护已安装文件系统对象的链表*/
 extern spinlock_t vfsmount_lock;
 
 #endif

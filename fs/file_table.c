@@ -19,7 +19,7 @@
 
 /* sysctl tunables... */
 struct files_stat_struct files_stat = {
-	.max_files = NR_FILE
+	.max_files = NR_FILE		/*可分配文件对象的最大数目,也就是系统可同时访问的最大文件数*/
 };
 
 EXPORT_SYMBOL(files_stat); /* Needed by unix.o */
@@ -61,6 +61,10 @@ static inline void file_free(struct file *f)
  * Returns NULL, if there are no more free file structures or
  * we run out of memory.
  */
+
+/*
+*	分配一个新的文件对象
+*/
 struct file *get_empty_filp(void)
 {
 static int old_max;
@@ -71,7 +75,9 @@ static int old_max;
 	 */
 	if (files_stat.nr_files < files_stat.max_files ||
 				capable(CAP_SYS_ADMIN)) {
+		/*从filp高速缓存中获得一个空闲文件对象*/
 		f = kmem_cache_alloc(filp_cachep, GFP_KERNEL);
+		/*初始化*/
 		if (f) {
 			memset(f, 0, sizeof(*f));
 			if (security_file_alloc(f)) {

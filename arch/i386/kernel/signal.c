@@ -34,6 +34,8 @@
 /*
  * Atomically swap in the new signal mask, and wait for a signal.
  */
+
+/*把进程设置为TASK_INTERRUPTIBLE状态*/
 asmlinkage int
 sys_sigsuspend(int history0, int history1, old_sigset_t mask)
 {
@@ -51,6 +53,7 @@ sys_sigsuspend(int history0, int history1, old_sigset_t mask)
 	while (1) {
 		current->state = TASK_INTERRUPTIBLE;
 		schedule();
+		/*当发出sigsuspend()系统调用的进程又开始执行时,传递唤醒该进程的信号*/
 		if (do_signal(regs, &saveset))
 			return -EINTR;
 	}
@@ -84,6 +87,12 @@ sys_rt_sigsuspend(struct pt_regs regs)
 	}
 }
 
+/*
+*	允许用户为信号指定一个操作,若没有自定义操作,则执行缺省操作
+*	参数:		int sig---信号编号
+*				const struct old_sigaction __user *act---act表,表示新操作
+*	      			struct old_sigaction __user *oact---可选的输出参数,可用来获得与信号相关的以前的操作
+*/
 asmlinkage int 
 sys_sigaction(int sig, const struct old_sigaction __user *act,
 	      struct old_sigaction __user *oact)
@@ -93,6 +102,7 @@ sys_sigaction(int sig, const struct old_sigaction __user *act,
 
 	if (act) {
 		old_sigset_t mask;
+		/*检查act地址的有效性,*/
 		if (verify_area(VERIFY_READ, act, sizeof(*act)) ||
 		    __get_user(new_ka.sa.sa_handler, &act->sa_handler) ||
 		    __get_user(new_ka.sa.sa_restorer, &act->sa_restorer))
@@ -206,6 +216,10 @@ badframe:
 	return 1;
 }
 
+/*
+*	计算类型为pt_regs的数据结构regs的地址
+*	pt_regs包含用户态进程的硬件上下文
+*/
 asmlinkage int sys_sigreturn(unsigned long __unused)
 {
 	struct pt_regs *regs = (struct pt_regs *) &__unused;
@@ -213,6 +227,7 @@ asmlinkage int sys_sigreturn(unsigned long __unused)
 	sigset_t set;
 	int eax;
 
+	/*从存放在esp中的值,导出并检查帧在用户态堆栈中的地址*/
 	if (verify_area(VERIFY_READ, frame, sizeof(*frame)))
 		goto badframe;
 	if (__get_user(set.sig[0], &frame->sc.oldmask)
@@ -223,10 +238,15 @@ asmlinkage int sys_sigreturn(unsigned long __unused)
 
 	sigdelsetmask(&set, ~_BLOCKABLE);
 	spin_lock_irq(&current->sighand->siglock);
+	/*
+	*	调用信号处理程序前所阻塞的信号的位数组从帧拷贝到current
+	*	解除为信号处理程序执行而屏蔽的所有信号
+	*/
 	current->blocked = set;
 	recalc_sigpending();
 	spin_unlock_irq(&current->sighand->siglock);
-	
+
+	/*把来自帧的进程硬件上下文拷贝到内核态堆栈中,并从用户态堆栈中删除帧*/
 	if (restore_sigcontext(regs, &frame->sc, &eax))
 		goto badframe;
 	return eax;
@@ -338,6 +358,7 @@ get_sigframe(struct k_sigaction *ka, struct pt_regs * regs, size_t frame_size)
 		esp = (unsigned long) ka->sa.sa_restorer;
 	}
 
+	/*栈朝低地址延伸,当前栈顶地址- 帧大小,再与8的倍数对齐,获得帧的起始地址*/
 	return (void __user *)((esp - frame_size) & -8ul);
 }
 
@@ -346,6 +367,13 @@ get_sigframe(struct k_sigaction *ka, struct pt_regs * regs, size_t frame_size)
 extern void __user __kernel_sigreturn;
 extern void __user __kernel_rt_sigreturn;
 
+/*
+*	建立适当地用户态堆栈
+*	参数:	int sig---信号编号
+*			struct k_sigaction *ka---与信号相关的k_sigaction表的地址
+*			sigset_t *set---阻塞信号的位掩码数组的地址
+*			struct pt_regs * regs---用户态寄存器的内容保存在内核态堆栈区的地址
+*/
 static void setup_frame(int sig, struct k_sigaction *ka,
 			sigset_t *set, struct pt_regs * regs)
 {
@@ -354,8 +382,10 @@ static void setup_frame(int sig, struct k_sigaction *ka,
 	int err = 0;
 	int usig;
 
+	/*计算帧的第一个内存单元,这个内存单元通常是在用户态堆栈中*/
 	frame = get_sigframe(ka, regs, sizeof(*frame));
 
+	/*对返回地址进行验证*/
 	if (!access_ok(VERIFY_WRITE, frame, sizeof(*frame)))
 		goto give_sigsegv;
 
@@ -365,6 +395,7 @@ static void setup_frame(int sig, struct k_sigaction *ka,
 		? current_thread_info()->exec_domain->signal_invmap[sig]
 		: sig;
 
+	/*填充帧的所有字段*/
 	err = __put_user(usig, &frame->sig);
 	if (err)
 		goto give_sigsegv;
@@ -380,6 +411,7 @@ static void setup_frame(int sig, struct k_sigaction *ka,
 			goto give_sigsegv;
 	}
 
+	/*pretcode初始化为&__kernel_sigreturn*/
 	restorer = &__kernel_sigreturn;
 	if (ka->sa.sa_flags & SA_RESTORER)
 		restorer = ka->sa.sa_restorer;
@@ -402,6 +434,8 @@ static void setup_frame(int sig, struct k_sigaction *ka,
 		goto give_sigsegv;
 
 	/* Set up registers for signal handler */
+	
+	/*修改内核态堆栈的regs区,保证当current恢复它在用户态的执行时,控制权将传递给信号处理程序*/
 	regs->esp = (unsigned long) frame;
 	regs->eip = (unsigned long) ka->sa.sa_handler;
 	regs->eax = (unsigned long) sig;
@@ -558,6 +592,10 @@ handle_signal(unsigned long sig, siginfo_t *info, struct k_sigaction *ka,
 	}
 
 	/* Set up the stack frame */
+	/*
+	*	建立用户态堆栈
+	*	两个函数的选择---内核检查与信号相关的sigaction表sa_flags字段的SA_SIGINFO
+	*/
 	if (ka->sa.sa_flags & SA_SIGINFO)
 		setup_rt_frame(sig, ka, info, oldset, regs);
 	else
@@ -577,6 +615,13 @@ handle_signal(unsigned long sig, siginfo_t *info, struct k_sigaction *ka,
  * want to handle. Thus you cannot kill init even with a SIGKILL even by
  * mistake.
  */
+
+/*
+*	处理非阻塞的挂起信号
+*	参数:	struct pt_regs *regs---栈区的地址,当前进程在用户态下寄存器的内容存放在这个栈中
+*			sigset_t *oldset---变量的地址,假设函数把阻塞信号的位掩码数组存放在这个变量中
+*	核心由重复调用dequeue_signal()函数的循环组成,直到私有和共享挂起信号队列中都没有非阻塞信号
+*/
 int fastcall do_signal(struct pt_regs *regs, sigset_t *oldset)
 {
 	siginfo_t info;
@@ -589,6 +634,11 @@ int fastcall do_signal(struct pt_regs *regs, sigset_t *oldset)
 	 * kernel mode. Just return without doing anything
 	 * if so.
 	 */
+
+	/*
+	*	通常只在CPU要返回用户态时才调用do_signal,
+	*	如果中断处理函数调用do_signal,则函数立刻返回
+	*/
 	if ((regs->xcs & 3) != 3)
 		return 1;
 
@@ -597,9 +647,11 @@ int fastcall do_signal(struct pt_regs *regs, sigset_t *oldset)
 		goto no_signal;
 	}
 
+	/*oldset == NULL, 用current->blocked的地址初始化*/
 	if (!oldset)
 		oldset = &current->blocked;
 
+	/*signr == 0---所有挂起的信号已全部处理完毕*/	
 	signr = get_signal_to_deliver(&info, &ka, regs, NULL);
 	if (signr > 0) {
 		/* Reenable any watchpoints before delivering the
@@ -612,6 +664,7 @@ int fastcall do_signal(struct pt_regs *regs, sigset_t *oldset)
 		}
 
 		/* Whee!  Actually deliver the signal.  */
+		/*信号有专门的处理程序,强迫该处理程序执行*/
 		handle_signal(signr, &info, &ka, oldset, regs);
 		return 1;
 	}

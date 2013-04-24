@@ -42,6 +42,7 @@ seqlock_t rename_lock __cacheline_aligned_in_smp = SEQLOCK_UNLOCKED;
 
 EXPORT_SYMBOL(dcache_lock);
 
+/*目录项对象的存放*/
 static kmem_cache_t *dentry_cache; 
 
 #define DNAME_INLINE_LEN (sizeof(struct dentry)-offsetof(struct dentry,d_iname))
@@ -1022,6 +1023,9 @@ struct dentry *d_splice_alias(struct inode *inode, struct dentry *dentry)
  * directory using the seqlockt_t rename_lock.
  */
 
+/*
+*	在散列表中查找给定的父目录项对象和文件名
+*/
 struct dentry * d_lookup(struct dentry * parent, struct qstr * name)
 {
 	struct dentry * dentry = NULL;
@@ -1700,6 +1704,7 @@ static void __init dcache_init(unsigned long mempages)
 kmem_cache_t *names_cachep;
 
 /* SLAB cache for file structures */
+/*文件对象通过filp的高速缓存分配,filp地址放在filp_cachep*/
 kmem_cache_t *filp_cachep;
 
 EXPORT_SYMBOL(d_genocide);

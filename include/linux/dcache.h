@@ -156,6 +156,7 @@ d_iput:		no		no		no       yes
 #define DCACHE_REFERENCED	0x0008  /* Recently used, don't discard. */
 #define DCACHE_UNHASHED		0x0010	
 
+/*保护目录项高速缓存数据结构免受多处理器系统上的同时访问*/
 extern spinlock_t dcache_lock;
 
 /**

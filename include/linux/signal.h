@@ -39,6 +39,9 @@ struct sigpending {
 
 /* We don't use <linux/bitops.h> for these because there is no need to
    be atomic.  */
+/*
+*	把nsig信号在sigset_t类型
+*/
 static inline void sigaddset(sigset_t *set, int _sig)
 {
 	unsigned long sig = _sig - 1;
@@ -138,6 +141,10 @@ _SIG_SET_OP(signotset, _sig_not)
 #undef _SIG_SET_OP
 #undef _sig_not
 
+/*
+*	把sigset_t类型的变量中的位置为0
+*	参数:sigset_t *set---指向sigset_t类型变量
+*/
 static inline void sigemptyset(sigset_t *set)
 {
 	switch (_NSIG_WORDS) {
@@ -150,6 +157,10 @@ static inline void sigemptyset(sigset_t *set)
 	}
 }
 
+/*
+*	把sigset_t类型的变量中的位置为1
+*	参数:sigset_t *set---指向sigset_t类型变量
+*/
 static inline void sigfillset(sigset_t *set)
 {
 	switch (_NSIG_WORDS) {

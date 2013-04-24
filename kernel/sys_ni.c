@@ -7,6 +7,8 @@
 /*
  * Non-implemented system calls get redirected here.
  */
+
+/*未实现系统调用的服务例程*/
 asmlinkage long sys_ni_syscall(void)
 {
 	return -ENOSYS;

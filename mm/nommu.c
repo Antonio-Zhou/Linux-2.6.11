@@ -234,10 +234,11 @@ void vunmap(void *addr)
  *  to a regular file.  in this case, the unmapping will need
  *  to invoke file system routines that need the global lock.
  */
+
 asmlinkage unsigned long sys_brk(unsigned long brk)
 {
 	struct mm_struct *mm = current->mm;
-
+	
 	if (brk < mm->start_brk || brk > mm->context.end_brk)
 		return mm->brk;
 

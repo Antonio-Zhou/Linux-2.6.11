@@ -1032,6 +1032,7 @@ void __init trap_init(void)
 #endif
 	set_trap_gate(19,&simd_coprocessor_error);
 
+	/*建立对应于向量128的中断描述符表表项*/
 	set_system_gate(SYSCALL_VECTOR,&system_call);
 
 	/*

@@ -589,9 +589,15 @@ void emergency_remount(void)
  * filesystems which don't use real block-devices.  -- jrs
  */
 
+/*指向一个辅助结构(记录当前在用的次设备号)的指针*/
 static struct idr unnamed_dev_idr;
 static DEFINE_SPINLOCK(unnamed_dev_lock);/* protects the above */
 
+
+/*
+*	用于初始化特殊文件系统的超级块
+*	本质上获取一个未使用的次设备号dev,然后用主设备号0和次设备号dev设置新超级块的s_dev字段
+*/
 int set_anon_super(struct super_block *s, void *data)
 {
 	int dev;
@@ -621,6 +627,9 @@ int set_anon_super(struct super_block *s, void *data)
 
 EXPORT_SYMBOL(set_anon_super);
 
+/*
+*	移走特殊文件系统的超级块
+*/
 void kill_anon_super(struct super_block *sb)
 {
 	int slot = MINOR(sb->s_dev);
@@ -669,6 +678,9 @@ static void bdev_uevent(struct block_device *bdev, enum kobject_action action)
 	}
 }
 
+/*
+*	分配并初始化一个新的适合于磁盘fs的超级块
+*/
 struct super_block *get_sb_bdev(struct file_system_type *fs_type,
 	int flags, const char *dev_name, void *data,
 	int (*fill_super)(struct super_block *, void *, int))
@@ -677,6 +689,7 @@ struct super_block *get_sb_bdev(struct file_system_type *fs_type,
 	struct super_block *s;
 	int error = 0;
 
+	/*打开设备文件名为dev_name 的块设备*/
 	bdev = open_bdev_excl(dev_name, flags, fs_type);
 	if (IS_ERR(bdev))
 		return (struct super_block *)bdev;
@@ -687,6 +700,7 @@ struct super_block *get_sb_bdev(struct file_system_type *fs_type,
 	 * while we are mounting
 	 */
 	down(&bdev->bd_mount_sem);
+	/*搜索fs的超级块对象链表*/
 	s = sget(fs_type, test_bdev_super, set_bdev_super, bdev);
 	up(&bdev->bd_mount_sem);
 	if (IS_ERR(s))
@@ -743,13 +757,15 @@ struct super_block *get_sb_nodev(struct file_system_type *fs_type,
 	int (*fill_super)(struct super_block *, void *, int))
 {
 	int error;
+	/*分配新的超级块*/
 	struct super_block *s = sget(fs_type, NULL, set_anon_super, NULL);
 
 	if (IS_ERR(s))
 		return s;
 
 	s->s_flags = flags;
-
+	
+	/*分配索引节点对象和对应的目录项对象,并填写超级块*/
 	error = fill_super(s, data, flags & MS_VERBOSE ? 1 : 0);
 	if (error) {
 		up_write(&s->s_umount);
@@ -793,9 +809,17 @@ struct super_block *get_sb_single(struct file_system_type *fs_type,
 
 EXPORT_SYMBOL(get_sb_single);
 
+/*
+*	处理实际的安装操作,返回一个新安装fs描述符的地址
+*	参数:	const char *fstype---要安装的fs的类型名
+*		int flags---安装标志
+*		const char *name---存放fs的块设备的路径名
+*		void *data---指向传递给fs的read_super方法的附加数据的指针
+*/
 struct vfsmount *
 do_kern_mount(const char *fstype, int flags, const char *name, void *data)
 {
+	/*在fs类型中链表中搜索并确定存放在fstype参数中的名字的位置*/
 	struct file_system_type *type = get_fs_type(fstype);
 	struct super_block *sb = ERR_PTR(-ENOMEM);
 	struct vfsmount *mnt;
@@ -805,6 +829,7 @@ do_kern_mount(const char *fstype, int flags, const char *name, void *data)
 	if (!type)
 		return ERR_PTR(-ENODEV);
 
+	/*分配一个新的已安装fs的描述符,返回它的地址*/
 	mnt = alloc_vfsmnt(name);
 	if (!mnt)
 		goto out;
@@ -823,13 +848,16 @@ do_kern_mount(const char *fstype, int flags, const char *name, void *data)
 		}
 	}
 
+	/*依赖于fs的函数分配并初始化一个新的超级块*/
 	sb = type->get_sb(type, flags, name, data);
 	if (IS_ERR(sb))
 		goto out_free_secdata;
  	error = security_sb_kern_mount(sb, secdata);
  	if (error)
  		goto out_sb;
+	/*新超级块对象的地址初始化*/
 	mnt->mnt_sb = sb;
+	/*文件系统根目录对应的目录项对象的地址*/
 	mnt->mnt_root = dget(sb->s_root);
 	mnt->mnt_mountpoint = sb->s_root;
 	mnt->mnt_parent = mnt;

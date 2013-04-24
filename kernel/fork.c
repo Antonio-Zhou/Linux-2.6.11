@@ -321,10 +321,14 @@ static struct mm_struct * mm_init(struct mm_struct * mm)
 /*
  * Allocate and initialize an mm_struct.
  */
+ /*
+*	获得一个新的内存描述符
+*/
 struct mm_struct * mm_alloc(void)
 {
 	struct mm_struct * mm;
 
+	/*描述符被保存在sllab分配器高速缓存中,使用kmem_cache_alloc()初始化*/
 	mm = allocate_mm();
 	if (mm) {
 		memset(mm, 0, sizeof(*mm));
@@ -349,6 +353,10 @@ void fastcall __mmdrop(struct mm_struct *mm)
 /*
  * Decrement the use count and release all resources for an mm.
  */
+
+/*
+*	递减内存描述符的mm_users,如果==0,释放局部描述符表,线性区描述符及由内存描述符引用的页表
+*/
 void mmput(struct mm_struct *mm)
 {
 	if (atomic_dec_and_test(&mm->mm_users)) {
@@ -360,6 +368,7 @@ void mmput(struct mm_struct *mm)
 			spin_unlock(&mmlist_lock);
 		}
 		put_swap_token(mm);
+		/*mm_count -1, 若==0,释放mm_struct*/
 		mmdrop(mm);
 	}
 }
