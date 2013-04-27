@@ -265,6 +265,7 @@ static long do_fcntl(int fd, unsigned int cmd, unsigned long arg,
 	long err = -EINVAL;
 
 	switch (cmd) {
+	/*确定由flock结构描述符的锁是否与另一个进程已获得的某个FL_POSIX锁互相冲突，在冲突的情况下，用现有锁的信息重写flock结构*/
 	case F_DUPFD:
 		get_file(filp);
 		err = dupfd(filp, arg);
@@ -329,6 +330,12 @@ static long do_fcntl(int fd, unsigned int cmd, unsigned long arg,
 	return err;
 }
 
+/*
+ *	fcntl()系统调用的服务例程
+ *	参数:	unsigned int fd---要加锁的文件描述符
+ *		unsigned int cmd---锁操作
+ *		unsigned long arg---存放在用户态进程地址空间中的flock
+ * */
 asmlinkage long sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 {	
 	struct file *filp;
