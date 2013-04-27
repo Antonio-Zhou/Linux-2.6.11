@@ -1490,6 +1490,15 @@ EXPORT_SYMBOL(flock_lock_file_wait);
  *	%LOCK_MAND can be combined with %LOCK_READ or %LOCK_WRITE to allow other
  *	processes read and write access respectively.
  */
+
+/*
+ *	flock()系统调用服务例程，允许进程在打开文件上申请或删除劝告锁
+ *	参数:	unsigned int fd---要加锁的文件的文件描述符fd
+ *		unsigned int cmd---指定锁操作的参数cmd
+ *			LOCK_SH---共享的读锁
+ *			LOCK_EX---互斥的写锁
+ *			LOCK_UN---释放锁
+ * */
 asmlinkage long sys_flock(unsigned int fd, unsigned int cmd)
 {
 	struct file *filp;

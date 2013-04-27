@@ -750,6 +750,12 @@ asmlinkage long sys_fchown(unsigned int fd, uid_t user, gid_t group)
  * for the internal routines (ie open_namei()/follow_link() etc). 00 is
  * used by symlinks.
  */
+
+/*
+ *	参数:	const char * filename---路径名
+ *		int flags---访问模式标志
+ *		int mode---许可权位掩码
+ * */
 struct file *filp_open(const char * filename, int flags, int mode)
 {
 	int namei_flags, error;
@@ -760,7 +766,7 @@ struct file *filp_open(const char * filename, int flags, int mode)
 		namei_flags++;
 	if (namei_flags & O_TRUNC)
 		namei_flags |= 2;
-
+	/*执行查找操作*/
 	error = open_namei(filename, namei_flags, mode, &nd);
 	if (!error)
 		return dentry_open(nd.dentry, nd.mnt, flags);
@@ -770,6 +776,11 @@ struct file *filp_open(const char * filename, int flags, int mode)
 
 EXPORT_SYMBOL(filp_open);
 
+/*
+ *	参数:	struct dentry *dentry---目录项对象的地址
+ *		struct vfsmount *mnt---查找操作确定的已安装文件系统对象
+ *		int flags---访问模式标志
+ * */
 struct file *dentry_open(struct dentry *dentry, struct vfsmount *mnt, int flags)
 {
 	struct file * f;
@@ -777,6 +788,7 @@ struct file *dentry_open(struct dentry *dentry, struct vfsmount *mnt, int flags)
 	int error;
 
 	error = -ENFILE;
+	/*得到一个新的文件对象*/
 	f = get_empty_filp();
 	if (!f)
 		goto cleanup_dentry;
@@ -803,9 +815,11 @@ struct file *dentry_open(struct dentry *dentry, struct vfsmount *mnt, int flags)
 	}
 	f->f_flags &= ~(O_CREAT | O_EXCL | O_NOCTTY | O_TRUNC);
 
+	/*初始化预读的数据结构*/
 	file_ra_state_init(&f->f_ra, f->f_mapping->host->i_mapping);
 
 	/* NB: we're sure to have correct a_ops only after f_op->open */
+	/*检查直接I/O操作是否可以作用于文件*/
 	if (f->f_flags & O_DIRECT) {
 		if (!f->f_mapping->a_ops || !f->f_mapping->a_ops->direct_IO) {
 			fput(f);
@@ -930,6 +944,13 @@ void fastcall fd_install(unsigned int fd, struct file * file)
 
 EXPORT_SYMBOL(fd_install);
 
+/*
+ *	open系统调用的服务例程
+ *	参数:	const char __user * filename---要打开文件的路径名
+ *		int flags---访问模式的标志
+ *		int mode---该文件被创建所需要的许可权位掩码
+ *
+ * */
 asmlinkage long sys_open(const char __user * filename, int flags, int mode)
 {
 	char * tmp;
@@ -938,11 +959,14 @@ asmlinkage long sys_open(const char __user * filename, int flags, int mode)
 #if BITS_PER_LONG != 32
 	flags |= O_LARGEFILE;
 #endif
+	/*从进程地址空间读取该文件的路径名*/
 	tmp = getname(filename);
 	fd = PTR_ERR(tmp);
 	if (!IS_ERR(tmp)) {
+		/*在current->files->fd中查找一个空位置,返回相应的索引*/
 		fd = get_unused_fd();
 		if (fd >= 0) {
+			/*访问模式标志以及许可权位掩码*/
 			struct file *f = filp_open(tmp, flags, mode);
 			error = PTR_ERR(f);
 			if (IS_ERR(f))
