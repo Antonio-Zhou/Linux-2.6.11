@@ -153,6 +153,12 @@ __unregister_chrdev_region(unsigned major, unsigned baseminor, int minorct)
 	return cd;
 }
 
+/*
+ * 检查请求的设备号范围是否跨越一些次设备号，如果是，则确定其主设备号以及覆盖整个区间的相应设备号范围
+ * 参数：dev_t from---初始的设备号(主设备号和次设备号)
+ * 	 unsigned count---请求的设备号范围的大小
+ * 	 const char *name---这个范围内的设备号对应的设备驱动程序的名称
+ * */
 int register_chrdev_region(dev_t from, unsigned count, const char *name)
 {
 	struct char_device_struct *cd;
@@ -178,6 +184,13 @@ fail:
 	return PTR_ERR(cd);
 }
 
+/*
+ * 动态分配一个主设备号
+ * 参数：dev_t *dev---主设备号
+ * 	 unsigned baseminor---设备号范围内的初始次设备号
+ * 	 unsigned count---范围的大小
+ * 	 const char *name---设备驱动程序的名称
+ * */
 int alloc_chrdev_region(dev_t *dev, unsigned baseminor, unsigned count,
 			const char *name)
 {
@@ -361,8 +374,12 @@ static int exact_lock(dev_t dev, void *data)
 	return cdev_get(p) ? 0 : -1;
 }
 
+/*
+ * 在设备驱动程序模型中，注册一个cdev描述符。
+ */
 int cdev_add(struct cdev *p, dev_t dev, unsigned count)
 {
+	/*初始化*/
 	p->dev = dev;
 	p->count = count;
 	return kobj_map(cdev_map, dev, count, NULL, exact_match, exact_lock, p);
@@ -403,6 +420,10 @@ static struct kobj_type ktype_cdev_dynamic = {
 	.release	= cdev_dynamic_release,
 };
 
+/*
+ * 动态的分配cdev描述符，并初始化内嵌的kobject数据结构，
+ * 因此在引用计数==0时会自动释放该描述符
+ */
 struct cdev *cdev_alloc(void)
 {
 	struct cdev *p = kmalloc(sizeof(struct cdev), GFP_KERNEL);

@@ -15,6 +15,7 @@
 #include <linux/kobject.h>
 #include <linux/kobj_map.h>
 
+/*字符驱动程序kobject的映射域*/
 struct kobj_map {
 	struct probe {
 		struct probe *next;
@@ -28,6 +29,9 @@ struct kobj_map {
 	struct rw_semaphore *sem;
 };
 
+/*
+ * 依次建立设备驱动程序模型的数据结构，把设备号范围复制到设备驱动程序的描述符中
+ */
 int kobj_map(struct kobj_map *domain, dev_t dev, unsigned long range,
 	     struct module *module, kobj_probe_t *probe,
 	     int (*lock)(dev_t, void *), void *data)
@@ -92,6 +96,11 @@ void kobj_unmap(struct kobj_map *domain, dev_t dev, unsigned long range)
 	kfree(found);
 }
 
+/*
+ * 接收kobject映射域和设备号作为输入参数：
+ * 搜索散列表，若找到，则返回该设备号锁在范围的拥有者的kobject地址。
+ * 当这个函数应用到字符设备的映射域时，就返回设备驱动程序描述符cdev中所嵌入的kobject地址
+ * */
 struct kobject *kobj_lookup(struct kobj_map *domain, dev_t dev, int *index)
 {
 	struct kobject *kobj;
