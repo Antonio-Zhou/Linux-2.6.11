@@ -270,9 +270,11 @@ static long do_fcntl(int fd, unsigned int cmd, unsigned long arg,
 		get_file(filp);
 		err = dupfd(filp, arg);
 		break;
+	/*设置由flock结构描述的锁.如果不能获得该锁，则这个系统调用返回一个错误码*/
 	case F_GETFD:
 		err = get_close_on_exec(fd) ? FD_CLOEXEC : 0;
 		break;
+	/*设置由flock结构描述的锁.如果不能获得该锁，则这个系统调用阻塞，即调用进程进入睡眠状态直到该锁可用为止。*/
 	case F_SETFD:
 		err = 0;
 		set_close_on_exec(fd, arg & FD_CLOEXEC);

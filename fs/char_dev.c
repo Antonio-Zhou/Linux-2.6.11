@@ -84,6 +84,7 @@ __register_chrdev_region(unsigned int major, unsigned int baseminor,
 	int ret = 0;
 	int i;
 
+	/*分配一个新的char_device_struct，并用0填充*/
 	cd = kmalloc(sizeof(struct char_device_struct), GFP_KERNEL);
 	if (cd == NULL)
 		return ERR_PTR(-ENOMEM);
@@ -93,6 +94,10 @@ __register_chrdev_region(unsigned int major, unsigned int baseminor,
 	write_lock_irq(&chrdevs_lock);
 
 	/* temporary */
+	/*
+	 * 设备号范围内的主设备号==0，请求动态分配一个主设备号
+	 * 从散列表的末尾表项开始继续向后寻找一个尚未使用的主设备号对应的空冲突链表(NULL指针)
+	 * */
 	if (major == 0) {
 		for (i = ARRAY_SIZE(chrdevs)-1; i > 0; i--) {
 			if (chrdevs[i] == NULL)
@@ -107,22 +112,27 @@ __register_chrdev_region(unsigned int major, unsigned int baseminor,
 		ret = major;
 	}
 
+	/*初始化char_device_struct*/
 	cd->major = major;
 	cd->baseminor = baseminor;
 	cd->minorct = minorct;
 	cd->name = name;
 
+	/*执行散列函数计算与主设备号对应的散列表索引*/
 	i = major_to_index(major);
 
+	/*遍历冲突链表，为新的char_device_struct寻找正确的位置*/
 	for (cp = &chrdevs[i]; *cp; cp = &(*cp)->next)
 		if ((*cp)->major > major ||
 		    ((*cp)->major == major && (*cp)->baseminor >= baseminor))
 			break;
+	/*找到与请求的设备号范围重叠的范围*/
 	if (*cp && (*cp)->major == major &&
 	    (*cp)->baseminor < baseminor + minorct) {
 		ret = -EBUSY;
 		goto out;
 	}
+	/*插入冲突链表中*/
 	cd->next = *cp;
 	*cp = cd;
 	write_unlock_irq(&chrdevs_lock);
@@ -202,6 +212,11 @@ int alloc_chrdev_region(dev_t *dev, unsigned baseminor, unsigned count,
 	return 0;
 }
 
+/*
+ * 参数：unsigned int major---请求的主设备号(如果是0就自动分配)
+ * 	 const char *name---设备驱动程序的名称
+ * 	 struct file_operations *fops---指向设备号范围内的特定字符设备文件的文件操作表
+ * */
 int register_chrdev(unsigned int major, const char *name,
 		    struct file_operations *fops)
 {
@@ -210,14 +225,17 @@ int register_chrdev(unsigned int major, const char *name,
 	char *s;
 	int err = -ENOMEM;
 
+	/*分配请求的设备号范围*/
 	cd = __register_chrdev_region(major, 0, 256, name);
 	if (IS_ERR(cd))
 		return PTR_ERR(cd);
 	
+	/*为设备驱动程序分配新的cdev*/
 	cdev = cdev_alloc();
 	if (!cdev)
 		goto out2;
 
+	/*初始化cdev*/
 	cdev->owner = fops->owner;
 	cdev->ops = fops;
 	kobject_set_name(&cdev->kobj, "%s", name);
@@ -287,6 +305,11 @@ void cdev_put(struct cdev *p)
 /*
  * Called every time a character special file is opened
  */
+
+/*
+ * 参数：struct inode * inode---索引节点的地址
+ * 	 struct file * filp---所打开文件对象的指针
+ * */
 int chrdev_open(struct inode * inode, struct file * filp)
 {
 	struct cdev *p;
@@ -295,10 +318,12 @@ int chrdev_open(struct inode * inode, struct file * filp)
 
 	spin_lock(&cdev_lock);
 	p = inode->i_cdev;
+	/*p不为空，则说明已经被访问*/
 	if (!p) {
 		struct kobject *kobj;
 		int idx;
 		spin_unlock(&cdev_lock);
+		/*搜索包括该设备号在内的范围*/
 		kobj = kobj_lookup(cdev_map, inode->i_rdev, &idx);
 		if (!kobj)
 			return -ENXIO;

@@ -1607,6 +1607,12 @@ out:
 /* Apply the lock described by l to an open file descriptor.
  * This implements both the F_SETLK and F_SETLKW commands of fcntl().
  */
+
+/*
+ *	参数:	struct file *filp---文件对象指针
+ *		unsigned int cmd---cmd命令(F_SETLK或F_SETLKW)
+ *		struct flock __user *l---flock数据结构的指针
+ * */
 int fcntl_setlk(struct file *filp, unsigned int cmd, struct flock __user *l)
 {
 	struct file_lock *file_lock = locks_alloc_lock();
