@@ -1284,6 +1284,10 @@ void fastcall mark_buffer_dirty(struct buffer_head *bh)
  * in preparation for freeing it (sometimes, rarely, buffers are removed from
  * a page but it ends up not being freed, and buffers may later be reattached).
  */
+
+/*
+ * 递减相应的引用计数器
+ * */
 void __brelse(struct buffer_head * buf)
 {
 	if (atomic_read(&buf->b_count)) {
@@ -1298,6 +1302,11 @@ void __brelse(struct buffer_head * buf)
  * bforget() is like brelse(), except it discards any
  * potentially dirty data.
  */
+
+/*
+ * 递减相应的引用计数器
+ * 还从间接块链表(b_assoc_buffers)中删除块，并把该缓冲区标记为干净的，强制内核忽略对缓冲区的任何修改，但实际上缓冲区依然必须被写回磁盘
+ * */
 void __bforget(struct buffer_head *bh)
 {
 	clear_buffer_dirty(bh);
@@ -1475,6 +1484,10 @@ EXPORT_SYMBOL(__find_get_block);
  * __getblk() will lock up the machine if grow_dev_page's try_to_free_buffers()
  * attempt is failing.  FIXME, perhaps?
  */
+
+/*
+ * 确定块在页高速缓存中的位置的函数
+ * */
 struct buffer_head *
 __getblk(struct block_device *bdev, sector_t block, int size)
 {
@@ -2995,7 +3008,10 @@ static void recalc_bh_state(void)
 		tot += per_cpu(bh_accounting, i).nr;
 	buffer_heads_over_limit = (tot > max_buffer_heads);
 }
-	
+
+/*
+ * 获取缓冲区首部
+ * */
 struct buffer_head *alloc_buffer_head(int gfp_flags)
 {
 	struct buffer_head *ret = kmem_cache_alloc(bh_cachep, gfp_flags);
@@ -3009,6 +3025,9 @@ struct buffer_head *alloc_buffer_head(int gfp_flags)
 }
 EXPORT_SYMBOL(alloc_buffer_head);
 
+/*
+ * 释放缓冲区首部
+ * */
 void free_buffer_head(struct buffer_head *bh)
 {
 	BUG_ON(!list_empty(&bh->b_assoc_buffers));

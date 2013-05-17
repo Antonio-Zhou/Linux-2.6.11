@@ -224,6 +224,10 @@ out:
  *
  *	Insert an item into the radix tree at position @index.
  */
+
+/*
+ * 在树中插入新节点 
+ * */
 int radix_tree_insert(struct radix_tree_root *root,
 			unsigned long index, void *item)
 {
@@ -233,8 +237,10 @@ int radix_tree_insert(struct radix_tree_root *root,
 	int error;
 
 	/* Make sure the tree is high enough.  */
+	/*获得最大索引*/
 	if ((!index && !root->rnode) ||
 			index > radix_tree_maxindex(root->height)) {
+		/*新页的索引无法用当前深度表示，增加适当数量的节点来增加树的深度*/
 		error = radix_tree_extend(root, index);
 		if (error)
 			return error;
@@ -248,6 +254,10 @@ int radix_tree_insert(struct radix_tree_root *root,
 	while (height > 0) {
 		if (*slot == NULL) {
 			/* Have to add a child node.  */
+			/*
+			 * 分配新节点
+			 * 试图从slab分配器高速缓存获得radix_tree_node结构
+			 * */
 			if (!(tmp = radix_tree_node_alloc(root)))
 				return -ENOMEM;
 			*slot = tmp;
@@ -256,6 +266,7 @@ int radix_tree_insert(struct radix_tree_root *root,
 		}
 
 		/* Go a level down */
+		/*根据页索引的偏移量，从根节点开始遍历树，直到叶子节点*/
 		offset = (index >> shift) & RADIX_TREE_MAP_MASK;
 		node = *slot;
 		slot = (struct radix_tree_node **)(node->slots + offset);
@@ -322,6 +333,13 @@ EXPORT_SYMBOL(radix_tree_lookup);
  *	Returns the address of the tagged item.   Setting a tag on a not-present
  *	item is a bug.
  */
+
+/*
+ * 设置页高速缓存中页的PG_dirty和PG_writeback标志
+ * 参数：struct radix_tree_root *root---基树的根
+ * 	 unsigned long index---页的索引
+ * 	 int tag---要设置的标记的类型
+ * */
 void *radix_tree_tag_set(struct radix_tree_root *root,
 			unsigned long index, int tag)
 {
@@ -363,6 +381,13 @@ EXPORT_SYMBOL(radix_tree_tag_set);
  *	Returns the address of the tagged item on success, else NULL.  ie:
  *	has the same return value and semantics as radix_tree_lookup().
  */
+
+/*
+ * 清除页高速缓存中页的PG_dirty和PG_writeback标志
+ * 参数：struct radix_tree_root *root---基树的根
+ * 	 unsigned long index---页的索引
+ * 	 int tag---要设置的标记的类型
+ * */
 void *radix_tree_tag_clear(struct radix_tree_root *root,
 			unsigned long index, int tag)
 {
@@ -651,8 +676,15 @@ EXPORT_SYMBOL(radix_tree_gang_lookup_tag);
  *
  *	Returns the address of the deleted item, or NULL if it was not present.
  */
+
+/*
+ * 从树中删除节点
+ * 参数：struct radix_tree_root *root---树跟的地址
+ * 	 unsigned long index---要删除的页索引
+ * */
 void *radix_tree_delete(struct radix_tree_root *root, unsigned long index)
 {
+	/*由描述从根到与要删除的页相应的叶子节点的路径构成*/
 	struct radix_tree_path path[RADIX_TREE_MAX_PATH], *pathp = path;
 	struct radix_tree_path *orig_pathp;
 	unsigned int height, shift;
@@ -737,6 +769,12 @@ EXPORT_SYMBOL(radix_tree_delete);
  *	@root:		radix tree root
  *	@tag:		tag to test
  */
+
+/*
+ * 利用树的所有节点的标志数组来测试基树是否至少包括一个指定状态的页
+ * 参数：struct radix_tree_root *root---基树的根
+ * 	 int tag---要测试的标记
+ * */
 int radix_tree_tagged(struct radix_tree_root *root, int tag)
 {
 	int idx;

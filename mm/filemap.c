@@ -113,6 +113,7 @@ void __remove_from_page_cache(struct page *page)
 {
 	struct address_space *mapping = page->mapping;
 
+	/*从树中删除节点*/
 	radix_tree_delete(&mapping->page_tree, page->index);
 	page->mapping = NULL;
 	mapping->nrpages--;
@@ -131,6 +132,9 @@ void remove_from_page_cache(struct page *page)
 	spin_unlock_irq(&mapping->tree_lock);
 }
 
+/*
+ * 取消文件所在块设备的请求队列
+ * */
 static int sync_page(void *word)
 {
 	struct address_space *mapping;
@@ -145,6 +149,7 @@ static int sync_page(void *word)
 	mapping = page_mapping(page);
 	if (mapping && mapping->a_ops && mapping->a_ops->sync_page)
 		mapping->a_ops->sync_page(page);
+	/*挂起进程，知道PG_locked清0*/
 	io_schedule();
 	return 0;
 }
@@ -343,16 +348,27 @@ int filemap_write_and_wait(struct address_space *mapping)
  *
  * This function does not add the page to the LRU.  The caller must do that.
  */
+
+/*
+ * 把一个新页的描述符插入到页高速缓存
+ * 参数：struct page *page---页描述符的地址
+ * 	 struct address_space *mapping---address_space对象的地址
+ * 	 pgoff_t offset---在地址空间内的页索引的值offset
+ * 	 int gfp_mask---为基树分配新节点时所使用的内存分配标志gfp_mask
+ * */
 int add_to_page_cache(struct page *page, struct address_space *mapping,
 		pgoff_t offset, int gfp_mask)
 {
+	/*禁用内核抢占,并把一些空的radix_tree_node结构赋给per CPU radix_tree_preloads*/
 	int error = radix_tree_preload(gfp_mask & ~__GFP_HIGHMEM);
 
 	if (error == 0) {
 		spin_lock_irq(&mapping->tree_lock);
+		/*在书中插入新节点*/
 		error = radix_tree_insert(&mapping->page_tree, offset, page);
 		if (!error) {
 			page_cache_get(page);
+			/*由于页是新的，内容无效，函数设置页框PG_locked，阻止其他的内核路径并发访问该页*/
 			SetPageLocked(page);
 			page->mapping = mapping;
 			page->index = offset;
@@ -360,6 +376,7 @@ int add_to_page_cache(struct page *page, struct address_space *mapping,
 			pagecache_acct(1);
 		}
 		spin_unlock_irq(&mapping->tree_lock);
+		/*重新启用内核抢占*/
 		radix_tree_preload_end();
 	}
 	return error;
@@ -468,13 +485,21 @@ EXPORT_SYMBOL(__lock_page);
  * a rather lightweight function, finding and getting a reference to a
  * hashed page atomically.
  */
+
+/*
+ * 在页高速缓存中查找页
+ * 参数：struct address_space *mapping---指向address_space的指针
+ * 	 unsigned long offset---偏移量
+ * */
 struct page * find_get_page(struct address_space *mapping, unsigned long offset)
 {
 	struct page *page;
 
 	spin_lock_irq(&mapping->tree_lock);
+	/*搜索拥有指定偏移量的基树的叶子节点*/
 	page = radix_tree_lookup(&mapping->page_tree, offset);
 	if (page)
+		/*增加该页的使用计数器*/
 		page_cache_get(page);
 	spin_unlock_irq(&mapping->tree_lock);
 	return page;
@@ -485,6 +510,10 @@ EXPORT_SYMBOL(find_get_page);
 /*
  * Same as above, but trylock it instead of incrementing the count.
  */
+
+/*
+ * 与find_lock_page()类似，但该函数不阻塞，若页已经上锁，就返回错误码
+ * */
 struct page *find_trylock_page(struct address_space *mapping, unsigned long offset)
 {
 	struct page *page;
@@ -510,6 +539,10 @@ EXPORT_SYMBOL(find_trylock_page);
  *
  * Returns zero if the page was not present. find_lock_page() may sleep.
  */
+
+/*
+ * 与find_get_page类似，但增加返回页的使用计数器，并调用lock_page()设置PG_locked
+ * */
 struct page *find_lock_page(struct address_space *mapping,
 				unsigned long offset)
 {
@@ -522,6 +555,10 @@ repeat:
 		page_cache_get(page);
 		if (TestSetPageLocked(page)) {
 			spin_unlock_irq(&mapping->tree_lock);
+			/*
+			 * 设置PG_locked,调用者能以互斥的方式访问返回的页
+			 * 如果页被加锁，阻塞当前进程
+			 * */
 			lock_page(page);
 			spin_lock_irq(&mapping->tree_lock);
 
@@ -563,6 +600,7 @@ struct page *find_or_create_page(struct address_space *mapping,
 	struct page *page, *cached_page = NULL;
 	int err;
 repeat:
+	/*若找不到请求页，就分配一个新页并插入页高速缓存*/
 	page = find_lock_page(mapping, index);
 	if (!page) {
 		if (!cached_page) {
@@ -601,6 +639,14 @@ EXPORT_SYMBOL(find_or_create_page);
  *
  * find_get_pages() returns the number of pages which were found.
  */
+
+/*
+ * 与find_get_page()类似，但它实现在高速缓存中查找一组具有相邻索引的页
+ * 参数：struct address_space *mapping---address_space对象的指针
+ * 	 pgoff_t start---地址空间中相对于搜索起始位置的偏移量
+ * 	 unsigned int nr_pages---所检索到页的最大数量
+ * 	 struct page **pages---指向由该函数赋值的页描述符数组的指针
+ * */
 unsigned find_get_pages(struct address_space *mapping, pgoff_t start,
 			    unsigned int nr_pages, struct page **pages)
 {
@@ -608,6 +654,7 @@ unsigned find_get_pages(struct address_space *mapping, pgoff_t start,
 	unsigned int ret;
 
 	spin_lock_irq(&mapping->tree_lock);
+	/*实现查找操作*/
 	ret = radix_tree_gang_lookup(&mapping->page_tree,
 				(void **)pages, start, nr_pages);
 	for (i = 0; i < ret; i++)
@@ -1553,13 +1600,16 @@ static inline struct page *__read_cache_page(struct address_space *mapping,
 	struct page *page, *cached_page = NULL;
 	int err;
 repeat:
+	/*检查页是否已经在高速缓存中*/
 	page = find_get_page(mapping, index);
 	if (!page) {
 		if (!cached_page) {
+			/*分配一个新页框*/
 			cached_page = page_cache_alloc_cold(mapping);
 			if (!cached_page)
 				return ERR_PTR(-ENOMEM);
 		}
+		/*在页高速缓存中插入相应的页描述符*/
 		err = add_to_page_cache_lru(cached_page, mapping,
 					index, GFP_KERNEL);
 		if (err == -EEXIST)
@@ -1586,6 +1636,14 @@ repeat:
  * Read into the page cache. If a page already exists,
  * and PageUptodate() is not set, try to fill the page.
  */
+
+/*
+ * 确保高速缓存中包括最新版本的指定页
+ * 参数：struct address_space *mapping---address_space对象的指针
+ * 	 unsigned long index---所请求页的偏移量的值
+ * 	 int (*filler)(void *,struct page*)---指向从磁盘读页数据的函数的指针
+ * 	 void *data---传递给filler函数的指针
+ * */
 struct page *read_cache_page(struct address_space *mapping,
 				unsigned long index,
 				int (*filler)(void *,struct page*),
@@ -1598,6 +1656,7 @@ retry:
 	page = __read_cache_page(mapping, index, filler, data);
 	if (IS_ERR(page))
 		goto out;
+	/*所请求的页已经在页高速缓存中，记录页已经被访问过的事实*/
 	mark_page_accessed(page);
 	if (PageUptodate(page))
 		goto out;
@@ -1612,6 +1671,7 @@ retry:
 		unlock_page(page);
 		goto out;
 	}
+	/*若页不使最新的，就从磁盘读该页*/
 	err = filler(data, page);
 	if (err < 0) {
 		page_cache_release(page);
