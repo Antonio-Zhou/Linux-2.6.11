@@ -1127,6 +1127,10 @@ init_page_buffers(struct page *page, struct block_device *bdev,
  *
  * This is user purely for blockdev mappings.
  */
+
+/*
+ * 创建新的块设备缓冲区页
+ * */
 static struct page *
 grow_dev_page(struct block_device *bdev, sector_t block,
 		pgoff_t index, int size)
@@ -1135,6 +1139,7 @@ grow_dev_page(struct block_device *bdev, sector_t block,
 	struct page *page;
 	struct buffer_head *bh;
 
+	/*在高速缓存中搜索需要的页，如果需要，把新页插入高速缓存*/
 	page = find_or_create_page(inode->i_mapping, index, GFP_NOFS);
 	if (!page)
 		return NULL;
@@ -1142,12 +1147,16 @@ grow_dev_page(struct block_device *bdev, sector_t block,
 	if (!PageLocked(page))
 		BUG();
 
+	/*检查PG_private，为空---不是一个缓冲区页,没有相关的缓冲区首部*/
 	if (page_has_buffers(page)) {
+		/*从private获得第一个缓冲区首部的地址*/
 		bh = page_buffers(page);
+		/*找到的页就是有效的缓冲区页*/
 		if (bh->b_size == size) {
 			init_page_buffers(page, bdev, block, size);
 			return page;
 		}
+		/*页中块的大小有错误,释放缓冲区页的上一个缓冲区首部*/
 		if (!try_to_free_buffers(page))
 			goto failed;
 	}
@@ -1155,6 +1164,7 @@ grow_dev_page(struct block_device *bdev, sector_t block,
 	/*
 	 * Allocate some buffers for this page
 	 */
+	/*根据页中所请求的块大小分配缓冲区首部，并把它们插入由b_this_page实现的循环链表*/
 	bh = alloc_page_buffers(page, size, 0);
 	if (!bh)
 		goto failed;
@@ -1165,7 +1175,9 @@ grow_dev_page(struct block_device *bdev, sector_t block,
 	 * run under the page lock.
 	 */
 	spin_lock(&inode->i_mapping->private_lock);
+	/*咋private中存放第一个缓冲区首部的地址*/
 	link_dev_buffers(page, bh);
+	/*初始化连接到页的缓冲区首部的字段*/
 	init_page_buffers(page, bdev, block, size);
 	spin_unlock(&inode->i_mapping->private_lock);
 	return page;
@@ -1186,6 +1198,13 @@ failed:
  * some of those buffers may be aliases of filesystem data.
  * grow_dev_page() will go BUG() if this happens.
  */
+
+/*
+ * 把块设备缓冲区页添加到页高速缓存中，
+ * 参数：struct block_device *bdev---block_device描述符地址
+ * 	 sector_t block---逻辑块号(块在块设备中的位置)
+ * 	 int size---块大小
+ * */
 static inline int
 grow_buffers(struct block_device *bdev, sector_t block, int size)
 {
@@ -1198,10 +1217,12 @@ grow_buffers(struct block_device *bdev, sector_t block, int size)
 		sizebits++;
 	} while ((size << sizebits) < PAGE_SIZE);
 
+	/*计算数据页在所请求块的块设备中的偏移量*/
 	index = block >> sizebits;
 	block = index << sizebits;
 
 	/* Create a page with the proper size buffers.. */
+	/*创建新的块设备缓冲区页*/
 	page = grow_dev_page(bdev, block, index, size);
 	if (!page)
 		return 0;
@@ -1456,16 +1477,23 @@ lookup_bh_lru(struct block_device *bdev, sector_t block, int size)
  * it in the LRU and mark it as accessed.  If it is not present then return
  * NULL
  */
+
+/*
+ * 在页高速缓存中搜索块
+ * */
 struct buffer_head *
 __find_get_block(struct block_device *bdev, sector_t block, int size)
 {
+	/*检查在LRU块高速缓存中是否有想想找的缓冲区首部*/
 	struct buffer_head *bh = lookup_bh_lru(bdev, block, size);
 
+	/*不存在*/
 	if (bh == NULL) {
 		bh = __find_get_block_slow(bdev, block, size);
 		if (bh)
 			bh_lru_install(bh);
 	}
+	/*根据块号和块大小得到与块设备相关的页的索引*/
 	if (bh)
 		touch_buffer(bh);
 	return bh;
@@ -1598,16 +1626,22 @@ static inline void discard_buffer(struct buffer_head * bh)
  *
  * NOTE: @gfp_mask may go away, and this function may become non-blocking.
  */
+
+/*
+ * 释放缓冲区页，但不可能释放有脏缓冲区或上锁的缓冲区的页
+ * */
 int try_to_release_page(struct page *page, int gfp_mask)
 {
 	struct address_space * const mapping = page->mapping;
 
 	BUG_ON(!PageLocked(page));
+	/*正在把页写回磁盘*/
 	if (PageWriteback(page))
 		return 0;
 	
 	if (mapping && mapping->a_ops->releasepage)
 		return mapping->a_ops->releasepage(page, gfp_mask);
+	/*依次扫描链接到缓冲区页的缓冲区首部*/
 	return try_to_free_buffers(page);
 }
 EXPORT_SYMBOL(try_to_release_page);
@@ -2895,6 +2929,9 @@ failed:
 	return 0;
 }
 
+/*
+ * 依次扫描链接到缓冲区页的缓冲区首部
+ * */
 int try_to_free_buffers(struct page *page)
 {
 	struct address_space * const mapping = page->mapping;
@@ -2930,6 +2967,7 @@ out:
 
 		do {
 			struct buffer_head *next = bh->b_this_page;
+			/*释放页的所有缓冲区首部(反复调用)*/
 			free_buffer_head(bh);
 			bh = next;
 		} while (bh != buffers_to_free);
