@@ -240,12 +240,20 @@ __sync_single_inode(struct inode *inode, struct writeback_control *wbc)
 /*
  * Write out an inode's dirty pages.  Called under inode_lock.
  */
+
+/*
+ * 回写与所选择的索引节点相关的脏缓冲区
+ * */
 static int
 __writeback_single_inode(struct inode *inode,
 			struct writeback_control *wbc)
 {
 	wait_queue_head_t *wqh;
 
+	/*
+	 * 索引节点被锁定,移到脏索引节点链表中
+	 * 因为我们假定wbc->sync_mode != WB_SYNC_ALL，所以函数不会因为等待索引节点解锁而阻塞
+	 * */
 	if ((wbc->sync_mode != WB_SYNC_ALL) && (inode->i_state & I_LOCK)) {
 		list_move(&inode->i_list, &inode->i_sb->s_dirty);
 		return 0;
@@ -306,6 +314,7 @@ sync_sb_inodes(struct super_block *sb, struct writeback_control *wbc)
 	const unsigned long start = jiffies;	/* livelock avoidance */
 
 	if (!wbc->for_kupdate || list_empty(&sb->s_io))
+		/*把sb->s_dirty所有节点插入到sb->s_io指向的链表中，并清空脏索引节点链表*/
 		list_splice_init(&sb->s_dirty, &sb->s_io);
 
 	while (!list_empty(&sb->s_io)) {
@@ -357,6 +366,7 @@ sync_sb_inodes(struct super_block *sb, struct writeback_control *wbc)
 			break;
 
 		/* Is another pdflush already flushing this queue? */
+		/*如果是pdflush线程，检查运行在另外一个CPU上的pdflush是否已经试图刷新这个块设备文件脏页*/
 		if (current_is_pdflush() && !writeback_acquire(bdi))
 			break;
 
@@ -416,6 +426,11 @@ writeback_inodes(struct writeback_control *wbc)
 restart:
 	sb = sb_entry(super_blocks.prev);
 	for (; sb != sb_entry(&super_blocks); sb = sb_entry(sb->s_list.prev)) {
+		/*
+		 * sb->s_dirty---超级块的脏索引节点
+		 * sb->s_io---等待被传输到磁盘的索引节点
+		 * 都为空，说明相应文件系统的索引节点没有脏页，处理下一个超级块
+		 * */
 		if (!list_empty(&sb->s_dirty) || !list_empty(&sb->s_io)) {
 			/* we're making our own get_super here */
 			sb->s_count++;
@@ -529,13 +544,20 @@ restart:
  * outstanding dirty inodes, the writeback goes block-at-a-time within the
  * filesystem's write_inode().  This is extremely slow.
  */
+
+/*
+ * 扫描超级块的链表，搜索要刷新的脏索引节点
+ * 参数：int wait---表示在执行完刷新之前，函数是否必须要等待
+ * */
 void sync_inodes(int wait)
 {
 	struct super_block *sb;
 
+	/*扫描每个包含脏索引节点的超级块，刷新其脏页*/
 	set_sb_syncing(0);
 	while ((sb = get_super_to_sync()) != NULL) {
 		sync_inodes_sb(sb, 0);
+		/*显式刷新该超级块所在块设备的脏缓冲区页*/
 		sync_blockdev(sb->s_bdev);
 		drop_super(sb);
 	}
@@ -590,6 +612,7 @@ EXPORT_SYMBOL(write_inode_now);
  *
  * The caller must have a ref on the inode.
  */
+
 int sync_inode(struct inode *inode, struct writeback_control *wbc)
 {
 	int ret;

@@ -293,6 +293,11 @@ EXPORT_SYMBOL(balance_dirty_pages_ratelimited);
  * writeback at least _min_pages, and keep writing until the amount of dirty
  * memory is less than the background threshold, or until we're all clean.
  */
+
+/*
+ * 系统地扫描页高速缓存以搜索要刷新的脏页
+ * 参数：unsigned long _min_pages---应该刷新到磁盘的最小页数
+ * */
 static void background_writeout(unsigned long _min_pages)
 {
 	long min_pages = _min_pages;
@@ -316,6 +321,7 @@ static void background_writeout(unsigned long _min_pages)
 		wbc.encountered_congestion = 0;
 		wbc.nr_to_write = MAX_WRITEBACK_PAGES;
 		wbc.pages_skipped = 0;
+		/*尝试写1024个脏页*/
 		writeback_inodes(&wbc);
 		min_pages -= MAX_WRITEBACK_PAGES - wbc.nr_to_write;
 		if (wbc.nr_to_write > 0 || wbc.pages_skipped > 0) {
@@ -332,6 +338,10 @@ static void background_writeout(unsigned long _min_pages)
  * the whole world.  Returns 0 if a pdflush thread was dispatched.  Returns
  * -1 if all pdflush threads were busy.
  */
+
+/*
+ * 参数：long nr_pages---页高速缓存中应该刷新的脏页数;0表示所有脏页都应该写回
+ * */
 int wakeup_bdflush(long nr_pages)
 {
 	if (nr_pages == 0) {
@@ -340,6 +350,7 @@ int wakeup_bdflush(long nr_pages)
 		get_writeback_state(&wbs);
 		nr_pages = wbs.nr_dirty + wbs.nr_unstable;
 	}
+	/*唤醒pdflush内核线程，并委托它执行回调函数background_writeout*/
 	return pdflush_operation(background_writeout, nr_pages);
 }
 
@@ -366,6 +377,10 @@ static struct timer_list laptop_mode_wb_timer =
  * older_than_this takes precedence over nr_to_write.  So we'll only write back
  * all dirty pages if they are all attached to "old" mappings.
  */
+
+/*
+ * 检查高速缓存中是否有"脏"了很久的页
+ * */
 static void wb_kupdate(unsigned long arg)
 {
 	unsigned long oldest_jif;
@@ -382,6 +397,7 @@ static void wb_kupdate(unsigned long arg)
 		.for_kupdate	= 1,
 	};
 
+	/*把脏的超级块写到磁盘中*/
 	sync_supers();
 
 	get_writeback_state(&wbs);
@@ -405,6 +421,7 @@ static void wb_kupdate(unsigned long arg)
 	if (time_before(next_jif, jiffies + HZ))
 		next_jif = jiffies + HZ;
 	if (dirty_writeback_centisecs)
+		/*重新启动wb_timer定时器*/
 		mod_timer(&wb_timer, next_jif);
 }
 
@@ -503,6 +520,10 @@ static struct notifier_block ratelimit_nb = {
  * dirty memory thresholds: allowing too much dirty highmem pins an excessive
  * number of buffer_heads.
  */
+
+/*
+ * 在内核初始化期间，建立wb_timer动态定时器，以便定时器的到期时间发生在dirty_writeback_centisecs文件规定的时间后
+ * */
 void __init page_writeback_init(void)
 {
 	long buffer_pages = nr_free_buffer_pages();

@@ -43,7 +43,10 @@ static void start_one_pdflush_thread(void);
 /*
  * All the pdflush threads.  Protected by pdflush_lock
  */
+
+/*空闲pdflush的描述符*/
 static LIST_HEAD(pdflush_list);
+/*SMP中。保护链表不被并发访问*/
 static DEFINE_SPINLOCK(pdflush_lock);
 
 /*
@@ -53,11 +56,15 @@ static DEFINE_SPINLOCK(pdflush_lock);
  * Readable by sysctl, but not writable.  Published to userspace at
  * /proc/sys/vm/nr_pdflush_threads.
  */
+
+/*pdflush内核线程的总数*/
 int nr_pdflush_threads = 0;
 
 /*
  * The time at which the pdflush thread pool last went empty
  */
+
+/*链表为空的时间*/
 static unsigned long last_empty_jifs;
 
 /*
@@ -96,6 +103,8 @@ static int __pdflush(struct pdflush_work *my_work)
 
 	spin_lock_irq(&pdflush_lock);
 	nr_pdflush_threads++;
+
+	/*循环执行，一直到内核线程死亡*/
 	for ( ; ; ) {
 		struct pdflush_work *pdf;
 
@@ -104,6 +113,7 @@ static int __pdflush(struct pdflush_work *my_work)
 		my_work->when_i_went_to_sleep = jiffies;
 		spin_unlock_irq(&pdflush_lock);
 
+		/*内核线程被唤醒*/
 		schedule();
 		if (try_to_freeze(PF_FREEZE)) {
 			spin_lock_irq(&pdflush_lock);
@@ -128,11 +138,14 @@ static int __pdflush(struct pdflush_work *my_work)
 		 * Thread creation: For how long have there been zero
 		 * available threads?
 		 */
+		/*不存在空闲pdflush线程的时间超过1秒*/
 		if (jiffies - last_empty_jifs > 1 * HZ) {
 			/* unlocked list_empty() test is OK here */
 			if (list_empty(&pdflush_list)) {
 				/* unlocked test is OK here */
+				/*pdflush内核线程数还没有到最大值*/
 				if (nr_pdflush_threads < MAX_PDFLUSH_THREADS)
+					/*创建另外一个线程*/
 					start_one_pdflush_thread();
 			}
 		}
@@ -167,6 +180,8 @@ static int __pdflush(struct pdflush_work *my_work)
  * these are visible to other tasks and CPUs.  (No problem has actually
  * been observed.  This is just paranoia).
  */
+
+/**/
 static int pdflush(void *dummy)
 {
 	struct pdflush_work my_work;
@@ -184,6 +199,12 @@ static int pdflush(void *dummy)
  * Returns zero if it indeed managed to find a worker thread, and passed your
  * payload to it.
  */
+
+/*
+ * 激活空闲的pdflush线程
+ * 参数：void (*fn)(unsigned long)---指向必须执行的函数
+ * 	 unsigned long arg0---参数
+ * */
 int pdflush_operation(void (*fn)(unsigned long), unsigned long arg0)
 {
 	unsigned long flags;
@@ -205,6 +226,7 @@ int pdflush_operation(void (*fn)(unsigned long), unsigned long arg0)
 			last_empty_jifs = jiffies;
 		pdf->fn = fn;
 		pdf->arg0 = arg0;
+		/*唤醒空闲的pdflush空闲进程*/
 		wake_up_process(pdf->who);
 		spin_unlock_irqrestore(&pdflush_lock, flags);
 	}

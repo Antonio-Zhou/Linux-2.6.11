@@ -277,9 +277,12 @@ EXPORT_SYMBOL(thaw_bdev);
  */
 static void do_sync(unsigned long wait)
 {
+	/*启动pdflush内核线程，把高速缓存中的所有脏页刷新到磁盘中*/
 	wakeup_bdflush(0);
+	/*扫描超级块的链表，搜索要刷新的脏索引节点*/
 	sync_inodes(0);		/* All mappings, inodes and their blockdevs */
 	DQUOT_SYNC(NULL);
+	/*把脏超级块写到磁盘*/
 	sync_supers();		/* Write the superblocks */
 	sync_filesystems(0);	/* Start syncing the filesystems */
 	sync_filesystems(wait);	/* Waitingly sync the filesystems */
@@ -1249,11 +1252,14 @@ __getblk_slow(struct block_device *bdev, sector_t block, int size)
 	for (;;) {
 		struct buffer_head * bh;
 
+		/*检查块是否已经在页高速缓存中*/
 		bh = __find_get_block(bdev, block, size);
 		if (bh)
 			return bh;
 
+		/*为请求的页分配一个新的缓冲区页*/
 		if (!grow_buffers(bdev, block, size))
+			/*grow_buffers()失败时，回收内存*/
 			free_more_memory();
 	}
 }
@@ -1515,6 +1521,10 @@ EXPORT_SYMBOL(__find_get_block);
 
 /*
  * 确定块在页高速缓存中的位置的函数
+ * 参数：struct block_device *bdev---block_device的地址
+ * 	 sector_t block---块号
+ * 	 int size---块大小
+ * 返回值：与缓冲区对应的缓冲区首部地址
  * */
 struct buffer_head *
 __getblk(struct block_device *bdev, sector_t block, int size)
@@ -1547,9 +1557,18 @@ EXPORT_SYMBOL(__breadahead);
  *  Reads a specified block, and returns buffer head that contains it.
  *  It returns NULL if the block was unreadable.
  */
+
+/*
+ * 在返回缓冲区首部之前，从磁盘块读盘
+ * 参数：struct block_device *bdev---block_device的地址
+ * 	 sector_t block---块号
+ * 	 int size---块大小
+ * 返回值：与缓冲区对应的缓冲区首部地址
+ * */
 struct buffer_head *
 __bread(struct block_device *bdev, sector_t block, int size)
 {
+	/*在页高速缓存中查找与所请求的块相关的缓冲区页,并获得指向相应缓冲区首部的指针*/
 	struct buffer_head *bh = __getblk(bdev, block, size);
 
 	if (!buffer_uptodate(bh))
@@ -2744,6 +2763,12 @@ static int end_bio_bh_io_sync(struct bio *bio, unsigned int bytes_done, int err)
 	return 0;
 }
 
+/*
+ * 向通用块层传递一个缓冲区首部，并由此传输一个数据块
+ * 只是一个连接作用的函数，根据缓冲区首部的内容创建一个bio请求
+ * 参数：int rw---数据传输的方向，READ或WRITE
+ * 	 struct buffer_head * bh---指向描述块缓冲区的缓冲区首部的指针
+ * */
 int submit_bh(int rw, struct buffer_head * bh)
 {
 	struct bio *bio;
@@ -2767,18 +2792,26 @@ int submit_bh(int rw, struct buffer_head * bh)
 	 * from here on down, it's all bio -- do the initial mapping,
 	 * submit_bio -> generic_make_request may further map this bio around
 	 */
+	/*分配一个新的bio描述符*/
 	bio = bio_alloc(GFP_NOIO, 1);
 
+	/*块中第一个扇区的号*/
 	bio->bi_sector = bh->b_blocknr * (bh->b_size >> 9);
+	/*块设备描述符*/
 	bio->bi_bdev = bh->b_bdev;
+	/*该段对应于块缓冲区*/
 	bio->bi_io_vec[0].bv_page = bh->b_page;
 	bio->bi_io_vec[0].bv_len = bh->b_size;
 	bio->bi_io_vec[0].bv_offset = bh_offset(bh);
 
+	/*只有一个涉及bio的段*/
 	bio->bi_vcnt = 1;
+	/*将要传输的是当前段*/
 	bio->bi_idx = 0;
+	/*块大小*/
 	bio->bi_size = bh->b_size;
 
+	/*传输终止时*/
 	bio->bi_end_io = end_bio_bh_io_sync;
 	bio->bi_private = bh;
 
@@ -2788,6 +2821,7 @@ int submit_bh(int rw, struct buffer_head * bh)
 	if (bio_flagged(bio, BIO_EOPNOTSUPP))
 		ret = -EOPNOTSUPP;
 
+	/*递减bio使用计数器，因为bio描述符已经被插入I/O调度程序的序列，所以不释放bio*/
 	bio_put(bio);
 	return ret;
 }
@@ -2817,19 +2851,29 @@ int submit_bh(int rw, struct buffer_head * bh)
  * All of the buffers must be for the same device, and must also be a
  * multiple of the current approved size for the device.
  */
+
+/*
+ * 几个数据块的传输，不一定在物理上相邻
+ * 参数：int rw--数据传输的方向，READ或WRITE
+ * 	 int nr---要传输的数据块的块号
+ * 	 struct buffer_head *bhs[]---指向块缓冲区所对应的缓冲区首部的指针数组
+ * */
 void ll_rw_block(int rw, int nr, struct buffer_head *bhs[])
 {
 	int i;
 
+	/*在所有缓冲区首部上循环*/
 	for (i = 0; i < nr; i++) {
 		struct buffer_head *bh = bhs[i];
 
+		/*检查并设置BH_locked*/
 		if (test_set_buffer_locked(bh))
 			continue;
 
 		get_bh(bh);
 		if (rw == WRITE) {
 			bh->b_end_io = end_buffer_write_sync;
+			/*检查并清楚N	H_locked*/
 			if (test_clear_buffer_dirty(bh)) {
 				submit_bh(WRITE, bh);
 				continue;
