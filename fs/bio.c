@@ -130,6 +130,8 @@ inline void bio_init(struct bio *bio)
  *   If %__GFP_WAIT is set then we will block on the internal pool waiting
  *   for a &struct bio to become free.
  **/
+
+/*分配一个新的bio描述符*/
 struct bio *bio_alloc(int gfp_mask, int nr_iovecs)
 {
 	struct bio *bio = mempool_alloc(bio_pool, gfp_mask);
@@ -799,6 +801,10 @@ void bio_check_pages_dirty(struct bio *bio)
  *   case something went wrong. Noone should call bi_end_io() directly on
  *   a bio unless they own it and thus know that it has an end_io function.
  **/
+
+/*
+ *
+ * */
 void bio_endio(struct bio *bio, unsigned int bytes_done, int error)
 {
 	if (error)
@@ -810,10 +816,12 @@ void bio_endio(struct bio *bio, unsigned int bytes_done, int error)
 		bytes_done = bio->bi_size;
 	}
 
+	/*更新bi_sise和bi_sector*/
 	bio->bi_size -= bytes_done;
 	bio->bi_sector += (bytes_done >> 9);
 
 	if (bio->bi_end_io)
+		/*bi_end_io的实现本质上依赖于触发I/O数据传送的内核组件*/
 		bio->bi_end_io(bio, bytes_done, error);
 }
 

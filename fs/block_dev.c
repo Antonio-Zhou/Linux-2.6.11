@@ -352,6 +352,7 @@ static int bdev_set(struct inode *inode, void *data)
 	return 0;
 }
 
+/*所有块设备描述符的全局链表首部*/
 static LIST_HEAD(all_bdevs);
 
 struct block_device *bdget(dev_t dev)

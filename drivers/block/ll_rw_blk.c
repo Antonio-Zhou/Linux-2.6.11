@@ -60,6 +60,11 @@ static wait_queue_head_t congestion_wqh[2] = {
 /*
  * Controlling structure to kblockd
  */
+
+/*
+ * kblockd所操作的工作队列
+ * 执行blk_unplug_work()
+ * */
 static struct workqueue_struct *kblockd_workqueue; 
 
 unsigned long blk_max_low_pfn, blk_max_pfn;
@@ -1212,6 +1217,11 @@ static int ll_merge_requests_fn(request_queue_t *q, struct request *req,
  * This is called with interrupts off and no requests on the queue and
  * with the queue lock held.
  */
+
+/*
+ * 插入一个设备，插入到某个块设备驱动程序处理的请求队列中
+ * 参数：request_queue_t *q---请求队列描述符的地址
+ * */
 void blk_plug_device(request_queue_t *q)
 {
 	WARN_ON(!irqs_disabled());
@@ -1224,6 +1234,7 @@ void blk_plug_device(request_queue_t *q)
 		return;
 
 	if (!test_and_set_bit(QUEUE_FLAG_PLUGGED, &q->queue_flags))
+		/*重启q->unplug_timer内嵌的动态定时器*/
 		mod_timer(&q->unplug_timer, jiffies + q->unplug_delay);
 }
 
@@ -1233,6 +1244,11 @@ EXPORT_SYMBOL(blk_plug_device);
  * remove the queue from the plugged list, if present. called with
  * queue lock held and interrupts disabled.
  */
+
+/*
+ * 拔去一个请求队列q：
+ *
+ * */
 int blk_remove_plug(request_queue_t *q)
 {
 	WARN_ON(!irqs_disabled());
@@ -1251,6 +1267,7 @@ EXPORT_SYMBOL(blk_remove_plug);
  */
 void __generic_unplug_device(request_queue_t *q)
 {
+	/*检查请求队列是否仍然活跃*/
 	if (test_bit(QUEUE_FLAG_STOPPED, &q->queue_flags))
 		return;
 
@@ -1261,6 +1278,7 @@ void __generic_unplug_device(request_queue_t *q)
 	 * was plugged, fire request_fn if queue has stuff to do
 	 */
 	if (elv_next_request(q))
+		/*开始处理请求队列的下一个请求*/
 		q->request_fn(q);
 }
 EXPORT_SYMBOL(__generic_unplug_device);
@@ -1276,6 +1294,11 @@ EXPORT_SYMBOL(__generic_unplug_device);
  *   gets unplugged, the request_fn defined for the queue is invoked and
  *   transfers started.
  **/
+
+/*
+ * 实现请求队列中的q->unplug_device方法
+ * 拔出块设备
+ * */
 void generic_unplug_device(request_queue_t *q)
 {
 	spin_lock_irq(q->queue_lock);
@@ -1798,6 +1821,9 @@ static struct request *get_request_wait(request_queue_t *q, int rw)
 	return rq;
 }
 
+/*
+ * 试图从一个特定请求队列的内存池中获得一个空闲的请求描述符
+ * */
 struct request *blk_get_request(request_queue_t *q, int rw, int gfp_mask)
 {
 	struct request *rq;
@@ -2200,6 +2226,10 @@ void __blk_put_request(request_queue_t *q, struct request *req)
 	}
 }
 
+/*
+ * 释放 一个请求描述符，
+ * 若该描述符的引用计数==0.则将该描述符归还回它原来的所在的内存池
+ * */
 void blk_put_request(struct request *req)
 {
 	/*
@@ -2227,6 +2257,10 @@ EXPORT_SYMBOL(blk_put_request);
  * If no queues are congested then just wait for the next request to be
  * returned.
  */
+
+/*
+ * 挂起当前进程，直到所有请求都变为不拥塞，或超时已到
+ * */
 long blk_congestion_wait(int rw, long timeout)
 {
 	long ret;
@@ -2349,6 +2383,11 @@ void __blk_attempt_remerge(request_queue_t *q, struct request *rq)
 
 EXPORT_SYMBOL(__blk_attempt_remerge);
 
+/*
+ * 实现请求队列描述符的make_request_fn方法
+ * 参数：request_queue_t *q---request_queue结构描述符
+ * 	 struct bio *bio---bio结构的描述符
+ * */
 static int __make_request(request_queue_t *q, struct bio *bio)
 {
 	struct request *req, *freereq = NULL;
@@ -2366,6 +2405,11 @@ static int __make_request(request_queue_t *q, struct bio *bio)
 	 * certain limit bounced to low memory (ie for highmem, or even
 	 * ISA dma in theory)
 	 */
+
+	/*
+	 * 建立回弹缓冲区
+	 * 若建立，则函数面对的是回弹缓冲区而不是原来的bio
+	 * */
 	blk_queue_bounce(q, &bio);
 
 	spin_lock_prefetch(q->queue_lock);
@@ -2379,35 +2423,48 @@ static int __make_request(request_queue_t *q, struct bio *bio)
 again:
 	spin_lock_irq(q->queue_lock);
 
+	/*请求队列是否存在待处理的请求*/
 	if (elv_queue_empty(q)) {
+		/*没有待处理请求，插入请求队列*/
 		blk_plug_device(q);
 		goto get_rq;
 	}
 	if (barrier)
 		goto get_rq;
 
+	/*
+	 * 插入的请求队列包含待处理请求
+	 * 检查新的bio结构是否可以并入已存在的请求中
+	 * */
 	el_ret = elv_merge(q, &req, bio);
 	switch (el_ret) {
+		/*可作为末尾的bio插入到某个请求req中*/
 		case ELEVATOR_BACK_MERGE:
 			BUG_ON(!rq_mergeable(req));
 
+			/*检查是否可以扩展该请求*/
 			if (!q->back_merge_fn(q, req, bio))
 				break;
 
+			/*将bio插入req链表末尾，并更新req的相应值*/
 			req->biotail->bi_next = bio;
 			req->biotail = bio;
 			req->nr_sectors = req->hard_nr_sectors += nr_sectors;
 			drive_stat_acct(req, nr_sectors, 0);
+			/*试图将该请求和后面的请求合并*/
 			if (!attempt_back_merge(q, req))
 				elv_merged_request(q, req);
 			goto out;
 
+		/*bio可做为某个请求req的第一个bio被插入*/
 		case ELEVATOR_FRONT_MERGE:
 			BUG_ON(!rq_mergeable(req));
 
+			/*检查是否可以扩展该请求*/
 			if (!q->front_merge_fn(q, req, bio))
 				break;
 
+			/*将bio插入req链表首部，并更新req的相应值*/
 			bio->bi_next = req->bio;
 			req->bio = bio;
 
@@ -2422,6 +2479,7 @@ again:
 			req->sector = req->hard_sector = sector;
 			req->nr_sectors = req->hard_nr_sectors += nr_sectors;
 			drive_stat_acct(req, nr_sectors, 0);
+			/*试图将该请求和前面的请求合并*/
 			if (!attempt_front_merge(q, req))
 				elv_merged_request(q, req);
 			goto out;
@@ -2429,6 +2487,7 @@ again:
 		/*
 		 * elevator says don't/can't merge. get new request
 		 */
+		/*已经存在的请求中不能包含bio结构*/
 		case ELEVATOR_NO_MERGE:
 			break;
 
@@ -2453,7 +2512,9 @@ get_rq:
 			 * READA bit set
 			 */
 			err = -EWOULDBLOCK;
+			/*这个I/O是一次预读*/
 			if (bio_rw_ahead(bio))
+				/*不会执行数据传送*/
 				goto end_io;
 	
 			freereq = get_request_wait(q, rw);
@@ -2461,6 +2522,9 @@ get_rq:
 		goto again;
 	}
 
+	/*初始化请求描述符中的字段*/
+
+	/*一个标准的读或写操作*/
 	req->flags |= REQ_CMD;
 
 	/*
@@ -2491,6 +2555,7 @@ get_rq:
 out:
 	if (freereq)
 		__blk_put_request(q, freereq);
+	/*卸载设备驱动程序*/
 	if (bio_sync(bio))
 		__generic_unplug_device(q);
 
@@ -2512,6 +2577,7 @@ static inline void blk_partition_remap(struct bio *bio)
 	if (bdev != bdev->bd_contains) {
 		struct hd_struct *p = bdev->bd_part;
 
+		/*根据数据传送方向更新值*/
 		switch (bio->bi_rw) {
 		case READ:
 			p->read_sectors += bio_sectors(bio);
@@ -2522,7 +2588,9 @@ static inline void blk_partition_remap(struct bio *bio)
 			p->writes++;
 			break;
 		}
+		/*使相对于分区的起始扇区号转变为相对于整个磁盘的扇区号*/
 		bio->bi_sector += p->start_sect;
+		/*整个磁盘的块设备描述符*/
 		bio->bi_bdev = bdev->bd_contains;
 	}
 }
@@ -2651,6 +2719,10 @@ static void handle_bad_sector(struct bio *bio)
  * bi_sector for remaps as it sees fit.  So the values of these fields
  * should NOT be depended on after the call to generic_make_request.
  */
+
+/*
+ * 通用块层的主要入口点
+ * */
 void generic_make_request(struct bio *bio)
 {
 	request_queue_t *q;
@@ -2663,6 +2735,7 @@ void generic_make_request(struct bio *bio)
 	if (maxsector) {
 		sector_t sector = bio->bi_sector;
 
+		/*检查bi_sector是否超过块设备的扇区数*/
 		if (maxsector < nr_sectors || maxsector - nr_sectors < sector) {
 			/*
 			 * This may well happen - the kernel calls bread()
@@ -2685,6 +2758,7 @@ void generic_make_request(struct bio *bio)
 	do {
 		char b[BDEVNAME_SIZE];
 
+		/*获取与块设备相关的请求队列*/
 		q = bdev_get_queue(bio->bi_bdev);
 		if (!q) {
 			printk(KERN_ERR
@@ -2708,14 +2782,25 @@ end_io:
 		if (test_bit(QUEUE_FLAG_DEAD, &q->queue_flags))
 			goto end_io;
 
+		/*
+		 * 检查当前正在使用的I/O调度程序是否可以被动态取代
+		 * 若可以，则让当前进程睡眠，直到启动一个新的I/O调度程序
+		 * */
 		block_wait_queue_running(q);
 
 		/*
 		 * If this device has partitions, remap block n
 		 * of partition p to block n+start(p) of the disk.
 		 */
+		
+		/*
+		 * 检查块设备是否指的是一个磁盘分区
+		 * bio->bi_bdev != bio->bi_dev->bd_contains
+		 * 从此刻起i,通用块层，I/O调度程序以及设备驱动程序将忘记磁盘分区的存在，直接作用于整个磁盘
+		 * */
 		blk_partition_remap(bio);
 
+		/*将bio请求插入请求队列bio中*/
 		ret = q->make_request_fn(q, bio);
 	} while (ret);
 }

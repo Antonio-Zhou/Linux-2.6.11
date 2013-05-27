@@ -217,6 +217,7 @@ struct bio {
 	     i < (bio)->bi_vcnt;					\
 	     bvl++, i++)
 
+/*从索引bi_idx指向的当前段开始不断重复bio中的段*/
 #define bio_for_each_segment(bvl, bio, i)				\
 	__bio_for_each_segment(bvl, bio, i, (bio)->bi_idx)
 

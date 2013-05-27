@@ -185,6 +185,10 @@ static int exact_lock(dev_t dev, void *data)
  * This function registers the partitioning information in @disk
  * with the kernel.
  */
+
+/*
+ * 将新的gendisk对象插入到通用块层的数据结构中
+ * */
 void add_disk(struct gendisk *disk)
 {
 	disk->flags |= GENHD_FL_UP;
@@ -567,6 +571,10 @@ struct seq_operations diskstats_op = {
 };
 
 
+/*
+ * 内核发现新的磁盘，分配并初始化一个新的gendisk对象
+ * 若新磁盘被分区，则还会分配hd_struct类型的数组
+ * */
 struct gendisk *alloc_disk(int minors)
 {
 	struct gendisk *disk = kmalloc(sizeof(struct gendisk), GFP_KERNEL);
