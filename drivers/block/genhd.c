@@ -151,6 +151,7 @@ void blk_register_region(dev_t dev, unsigned long range, struct module *module,
 			 struct kobject *(*probe)(dev_t, int *, void *),
 			 int (*lock)(dev_t, void *), void *data)
 {
+	/*建立设备驱动程序和设备的主设备号(连同相关范围内的次设备号)之间的连接*/
 	kobj_map(bdev_map, dev, range, module, probe, lock, data);
 }
 
@@ -194,7 +195,9 @@ void add_disk(struct gendisk *disk)
 	disk->flags |= GENHD_FL_UP;
 	blk_register_region(MKDEV(disk->major, disk->first_minor),
 			    disk->minors, NULL, exact_match, exact_lock, disk);
+	/*注册设备驱动程序模型的gendisk描述符中的kobject结构,它作为设备驱动程序处理的一个新设备*/
 	register_disk(disk);
+	/*注册设备驱动模型的请求队列描述符中内嵌的kobject结构*/
 	blk_register_queue(disk);
 }
 
@@ -219,6 +222,7 @@ void unlink_gendisk(struct gendisk *disk)
  */
 struct gendisk *get_gendisk(dev_t dev, int *part)
 {
+	/*传递设备的主设备号和次设备号*/
 	struct kobject *kobj = kobj_lookup(bdev_map, dev, part);
 	return  kobj ? to_disk(kobj) : NULL;
 }

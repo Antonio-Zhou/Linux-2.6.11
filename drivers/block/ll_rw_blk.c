@@ -1526,6 +1526,12 @@ EXPORT_SYMBOL(blk_alloc_queue);
  *    blk_init_queue() must be paired with a blk_cleanup_queue() call
  *    when the block device is deactivated (such as at module unload).
  **/
+
+/*
+ * 分配一个请求队列描述符并将其中许多字段初始化为缺省值
+ * 参数：request_fn_proc *rfn---设备驱动的策略例程的地址
+ * 	 spinlock_t *lock---设备描述符的自旋锁的地址
+ * */
 request_queue_t *blk_init_queue(request_fn_proc *rfn, spinlock_t *lock)
 {
 	request_queue_t *q = blk_alloc_queue(GFP_KERNEL);

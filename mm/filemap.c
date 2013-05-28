@@ -981,6 +981,14 @@ success:
  * This is the "read()" routine for all filesystems
  * that can use the page cache directly.
  */
+
+/*
+ * 所有文件系统实现同步和异步读操作所使用的通用例程
+ * 参数：struct kiocb *iocb---kiocb描述符的地址
+ * 	 const struct iovec *iov---iovec描述符数组的地址
+ * 	 unsigned long nr_segs---数组的长度
+ * 	 loff_t *ppos---存放文件当前指针的一个变量的地址
+ * */
 ssize_t
 __generic_file_aio_read(struct kiocb *iocb, const struct iovec *iov,
 		unsigned long nr_segs, loff_t *ppos)
@@ -1001,6 +1009,7 @@ __generic_file_aio_read(struct kiocb *iocb, const struct iovec *iov,
 		count += iv->iov_len;
 		if (unlikely((ssize_t)(count|iv->iov_len) < 0))
 			return -EINVAL;
+		/*检验iovec描述符所描述的用户态缓冲区是否有效*/
 		if (access_ok(VERIFY_WRITE, iv->iov_base, iv->iov_len))
 			continue;
 		if (seg == 0)
@@ -1037,6 +1046,10 @@ __generic_file_aio_read(struct kiocb *iocb, const struct iovec *iov,
 	retval = 0;
 	if (count) {
 		for (seg = 0; seg < nr_segs; seg++) {
+			/*
+			 * 建立一个读操作描述符
+			 * 存放与单个用户态缓冲相关的文件读操作的当前状态
+			 * */
 			read_descriptor_t desc;
 
 			desc.written = 0;
@@ -1070,14 +1083,29 @@ generic_file_aio_read(struct kiocb *iocb, char __user *buf, size_t count, loff_t
 
 EXPORT_SYMBOL(generic_file_aio_read);
 
+/*
+ * 几乎所有磁盘文件系统中的普通文件及任何块设备文件的read方法
+ * 参数：struct file *filp---文件对象的地址
+ * 	 char __user *buf---用户态线性区的线性地址，文件中读出的数据必须存放在这里
+ * 	 size_t count---要读取的字符个数
+ * 	 loff_t *ppos---指向一个变量，存放了读操作开始处的文件偏移量
+ * */
 ssize_t
 generic_file_read(struct file *filp, char __user *buf, size_t count, loff_t *ppos)
 {
+	/*
+	 * buf---用户态缓冲区的地址
+	 * count---用户态缓冲区的长度
+	 * 用来存放待读文件中的数据
+	 * */
 	struct iovec local_iov = { .iov_base = buf, .iov_len = count };
+	/*跟踪正在运行的同步和异步I/O操作的完成状态*/
 	struct kiocb kiocb;
 	ssize_t ret;
 
+	/*初始化kiocb*/
 	init_sync_kiocb(&kiocb, filp);
+	/*将刚填完的iovec和kiocb描述符地址传给函数，返回文件有效读入的字节数*/
 	ret = __generic_file_aio_read(&kiocb, &local_iov, 1, ppos);
 	if (-EIOCBQUEUED == ret)
 		ret = wait_on_sync_kiocb(&kiocb);

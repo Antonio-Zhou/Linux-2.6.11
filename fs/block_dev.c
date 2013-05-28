@@ -355,6 +355,9 @@ static int bdev_set(struct inode *inode, void *data)
 /*所有块设备描述符的全局链表首部*/
 static LIST_HEAD(all_bdevs);
 
+/*
+ * 在bdev文件系统中查找相关的索引节点
+ * */
 struct block_device *bdget(dev_t dev)
 {
 	struct block_device *bdev;
@@ -411,23 +414,35 @@ void bdput(struct block_device *bdev)
 
 EXPORT_SYMBOL(bdput);
  
+/*
+ * 获得块设备描述符bdev的地址
+ * 参数：struct inode *inode---节点对象的地址
+ * */
 static struct block_device *bd_acquire(struct inode *inode)
 {
 	struct block_device *bdev;
 	spin_lock(&bdev_lock);
 	bdev = inode->i_bdev;
+	/*块设备文件已经打开*/
 	if (bdev && igrab(bdev->bd_inode)) {
 		spin_unlock(&bdev_lock);
 		return bdev;
 	}
 	spin_unlock(&bdev_lock);
+	/*
+	 * 块设备文件没有打开
+	 * 根据块设备文件的主设备号和次设备号，获取块设备描述符的地址
+	 * */
 	bdev = bdget(inode->i_rdev);
 	if (bdev) {
 		spin_lock(&bdev_lock);
 		if (inode->i_bdev)
 			__bd_forget(inode);
+		/*加速对相同块设备文件的打开操作*/
 		inode->i_bdev = bdev;
+		/*指向地址空间对象*/
 		inode->i_mapping = bdev->bd_inode->i_mapping;
+		/*插入到块设备描述符的已打开索引节点	链表*/
 		list_add(&inode->i_devices, &bdev->bd_inodes);
 		spin_unlock(&bdev_lock);
 	}
@@ -545,6 +560,7 @@ EXPORT_SYMBOL(check_disk_change);
 
 void bd_set_size(struct block_device *bdev, loff_t size)
 {
+	/*获取扇区大小(字节数)*/
 	unsigned bsize = bdev_hardsect_size(bdev);
 
 	bdev->bd_inode->i_size = size;
@@ -567,6 +583,7 @@ static int do_open(struct block_device *bdev, struct file *file)
 
 	file->f_mapping = bdev->bd_inode->i_mapping;
 	lock_kernel();
+	/*获取与这个块设备相关的gendisk描述符的地址*/
 	disk = get_gendisk(bdev->bd_dev, &part);
 	if (!disk) {
 		unlock_kernel();
@@ -576,12 +593,15 @@ static int do_open(struct block_device *bdev, struct file *file)
 	owner = disk->fops->owner;
 
 	down(&bdev->bd_sem);
+	/*块设备已经被打开*/
 	if (!bdev->bd_openers) {
 		bdev->bd_disk = disk;
 		bdev->bd_contains = bdev;
+		/*被打开的块设备是一个整盘*/
 		if (!part) {
 			struct backing_dev_info *bdi;
 			if (disk->fops->open) {
+				/*该方法是由块设备驱动程序定义的定制函数，执行任何特定的最后一分钟初始化*/
 				ret = disk->fops->open(bdev->bd_inode, file);
 				if (ret)
 					goto out_first;
@@ -593,11 +613,14 @@ static int do_open(struct block_device *bdev, struct file *file)
 					bdi = &default_backing_dev_info;
 				bdev->bd_inode->i_data.backing_dev_info = bdi;
 			}
+			/*仅适用于可移动设备*/
 			if (bdev->bd_invalidated)
+				/*扫描分区表并更新分区描述符*/
 				rescan_partitions(disk, bdev);
 		} else {
 			struct hd_struct *p;
 			struct block_device *whole;
+			/*传递次设备号disk->first_minor，获取整盘的块描述符地址*/
 			whole = bdget_disk(disk, 0);
 			ret = -ENOMEM;
 			if (!whole)
@@ -607,7 +630,9 @@ static int do_open(struct block_device *bdev, struct file *file)
 				goto out_first;
 			bdev->bd_contains = whole;
 			down(&whole->bd_sem);
+			/*说明磁盘分区上新的打开操作*/
 			whole->bd_part_count++;
+			/*分区描述符hd_struct的地址*/
 			p = disk->part[part - 1];
 			bdev->bd_inode->i_data.backing_dev_info =
 			   whole->bd_inode->i_data.backing_dev_info;
@@ -625,6 +650,7 @@ static int do_open(struct block_device *bdev, struct file *file)
 	} else {
 		put_disk(disk);
 		module_put(owner);
+		/*块设备是一个整盘*/
 		if (bdev->bd_contains == bdev) {
 			if (bdev->bd_disk->fops->open) {
 				ret = bdev->bd_disk->fops->open(bdev->bd_inode, file);
@@ -680,6 +706,11 @@ int blkdev_get(struct block_device *bdev, mode_t mode, unsigned flags)
 
 EXPORT_SYMBOL(blkdev_get);
 
+/*
+ * 块设备打开操作
+ * 参数：struct inode * inode---索引节点地址
+ * 	 struct file * filp---文件对象的地址
+ * */
 static int blkdev_open(struct inode * inode, struct file * filp)
 {
 	struct block_device *bdev;
@@ -693,6 +724,7 @@ static int blkdev_open(struct inode * inode, struct file * filp)
 	 */
 	filp->f_flags |= O_LARGEFILE;
 
+	/*获得块设备描述符bdev的地址*/
 	bdev = bd_acquire(inode);
 
 	res = do_open(bdev, filp);
