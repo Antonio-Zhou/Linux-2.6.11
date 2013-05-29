@@ -538,6 +538,10 @@ static void free_more_memory(void)
  * I/O completion handler for block_read_full_page() - pages
  * which come unlocked at the end of I/O.
  */
+
+/*
+ * 缓冲区首部的完成方法，对缓冲区的I/O数据传输一结束，它就执行。
+ * */
 static void end_buffer_async_read(struct buffer_head *bh, int uptodate)
 {
 	static DEFINE_SPINLOCK(page_uptodate_lock);
@@ -2134,6 +2138,11 @@ static int __block_commit_write(struct inode *inode, struct page *page,
  * set/clear_buffer_uptodate() functions propagate buffer state into the
  * page struct once IO has completed.
  */
+
+/*
+ * 以一次读一块的方式读一页数据
+ * 当读块设备文件和磁盘上块不相邻的普通文件时都使用该函数
+ * */
 int block_read_full_page(struct page *page, get_block_t *get_block)
 {
 	struct inode *inode = page->mapping->host;
@@ -2146,10 +2155,20 @@ int block_read_full_page(struct page *page, get_block_t *get_block)
 	if (!PageLocked(page))
 		PAGE_BUG(page);
 	blocksize = 1 << inode->i_blkbits;
+	/*
+	 * 检查PG_private。
+	 * 若置位，则该页与描述组成该页的块的缓冲区首部链表相关
+	 * */
 	if (!page_has_buffers(page))
+		/*
+		 * 为该页所含所有块缓冲区分配缓冲区首部
+		 * 页中第一个缓冲区首部地址在page->private中
+		 * 每个缓冲区首部的b_this_page指向该页下一个缓冲区的缓冲区首部
+		 * */
 		create_empty_buffers(page, blocksize, 0);
 	head = page_buffers(page);
 
+	/*从相对于页的文件偏移量(page->index)，计算出页中第一块的文件块号*/
 	iblock = (sector_t)page->index << (PAGE_CACHE_SHIFT - inode->i_blkbits);
 	lblock = (i_size_read(inode)+blocksize-1) >> inode->i_blkbits;
 	bh = head;
@@ -2157,12 +2176,23 @@ int block_read_full_page(struct page *page, get_block_t *get_block)
 	i = 0;
 
 	do {
+		/*
+		 * 设置了HB_Uptodate
+		 * 跳过该缓冲区继续处理该页的下一个缓冲区
+		 * */
 		if (buffer_uptodate(bh))
 			continue;
 
+		/*BH_Mapped未置位*/
 		if (!buffer_mapped(bh)) {
 			fully_mapped = 0;
+			/*该块未超出文件尾*/
 			if (iblock < lblock) {
+				/*
+				 * 普通文件：在文件系统的磁盘数据结构中查找，得到相对于磁盘或分区开始处的缓冲区逻辑块号
+				 * 块设备文件：把文件块号当做逻辑块号
+				 * 都将逻辑块号存放在相应缓冲区首部的b_blocknr中，并将BH_Mapped置位
+				 * */
 				if (get_block(inode, iblock, bh, 0))
 					SetPageError(page);
 			}
@@ -2178,15 +2208,20 @@ int block_read_full_page(struct page *page, get_block_t *get_block)
 			 * get_block() might have updated the buffer
 			 * synchronously
 			 */
+
+			/*因为依赖于文件系统的get_block()可能已触发块I/O操作而更新了缓冲区*/
 			if (buffer_uptodate(bh))
 				continue;
 		}
+		/*将缓冲区首部地址放入arr中，继续该页的下一个缓冲区*/
 		arr[nr++] = bh;
 	} while (i++, iblock++, (bh = bh->b_this_page) != head);
 
+	/*上一步未遇"文件洞"*/
 	if (fully_mapped)
 		SetPageMappedToDisk(page);
 
+	/*数组为空，页中所有缓冲区都是有效的*/
 	if (!nr) {
 		/*
 		 * All buffers are uptodate - we can set the page uptodate
@@ -2194,13 +2229,16 @@ int block_read_full_page(struct page *page, get_block_t *get_block)
 		 */
 		if (!PageError(page))
 			SetPageUptodate(page);
+		/*lock_page在哪里呢？？？？*/
 		unlock_page(page);
 		return 0;
 	}
 
 	/* Stage two: lock the buffers */
+	/*数组非空*/
 	for (i = 0; i < nr; i++) {
 		bh = arr[i];
+		/*对BH_Lock置位，函数将一直等到该缓冲区释放*/
 		lock_buffer(bh);
 		mark_buffer_async_read(bh);
 	}
@@ -2215,6 +2253,7 @@ int block_read_full_page(struct page *page, get_block_t *get_block)
 		if (buffer_uptodate(bh))
 			end_buffer_async_read(bh, 1);
 		else
+			/*触发相应块的I/O数据传输*/
 			submit_bh(READ, bh);
 	}
 	return 0;

@@ -115,7 +115,9 @@ static int
 blkdev_get_block(struct inode *inode, sector_t iblock,
 		struct buffer_head *bh, int create)
 {
+	/*检查页中的第一个块的块号是否超过块设备的最后一块的索引值*/
 	if (iblock >= max_block(I_BDEV(inode))) {
+		/*写操作*/
 		if (create)
 			return -EIO;
 
@@ -128,7 +130,12 @@ blkdev_get_block(struct inode *inode, sector_t iblock,
 		return 0;
 	}
 	bh->b_bdev = I_BDEV(inode);
+	/*文件块号*/
 	bh->b_blocknr = iblock;
+	/*
+	 * 把缓冲区首部的BH_Mapped置位
+	 * 表明缓冲区首部的b_dev和b_blocknr是有效的
+	 * */
 	set_buffer_mapped(bh);
 	return 0;
 }

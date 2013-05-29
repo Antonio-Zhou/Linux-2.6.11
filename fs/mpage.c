@@ -39,6 +39,10 @@
  * status of that page is hard.  See end_buffer_async_read() for the details.
  * There is no point in duplicating all that complexity.
  */
+
+/*
+ * bio的完成方法，一旦I/O数据传输完成，它就开始执行
+ * */
 static int mpage_end_io_read(struct bio *bio, unsigned int bytes_done, int err)
 {
 	const int uptodate = test_bit(BIO_UPTODATE, &bio->bi_flags);
@@ -92,6 +96,10 @@ struct bio *mpage_bio_submit(int rw, struct bio *bio)
 	bio->bi_end_io = mpage_end_io_read;
 	if (rw == WRITE)
 		bio->bi_end_io = mpage_end_io_write;
+	/*
+	 * 用数据传输的方向设定bi_rw标志，更新per CPU变量page_states来跟踪所读扇区数
+	 * 并在bio描述符上调用generic_make_request()
+	 * */
 	submit_bio(rw, bio);
 	return NULL;
 }
@@ -210,7 +218,9 @@ do_mpage_readpage(struct bio *bio, struct page *page, unsigned nr_pages,
 			sector_t *last_block_in_bio, get_block_t get_block)
 {
 	struct inode *inode = page->mapping->host;
+	/*块的大小*/
 	const unsigned blkbits = inode->i_blkbits;
+	/*页中的快数*/
 	const unsigned blocks_per_page = PAGE_CACHE_SIZE >> blkbits;
 	const unsigned blocksize = 1 << blkbits;
 	sector_t block_in_file;
@@ -223,7 +233,13 @@ do_mpage_readpage(struct bio *bio, struct page *page, unsigned nr_pages,
 	int length;
 	int fully_mapped = 1;
 
+	/*
+	 * 检查PG_private
+	 * 置位：该页是缓冲区页，也就是该页与描述组成该页的缓冲区首部链表相关，
+	 * 说明该页过去已从磁盘读入过，而且页中的块在磁盘上不是相邻的
+	 * */
 	if (page_has_buffers(page))
+		/*用一次读一块的方式读该页*/
 		goto confused;
 
 	block_in_file = page->index << (PAGE_CACHE_SHIFT - blkbits);
@@ -251,23 +267,31 @@ do_mpage_readpage(struct bio *bio, struct page *page, unsigned nr_pages,
 		 * we just collected from get_block into the page's buffers
 		 * so readpage doesn't have to repeat the get_block call
 		 */
+
+		/* 3.一个块缓冲区已经由get_block函数写入时*/
 		if (buffer_uptodate(&bh)) {
 			map_buffer_to_page(page, &bh, page_block);
 			goto confused;
 		}
 	
+		/* 某块落入"文件洞"内*/
 		if (first_hole != blocks_per_page)
 			goto confused;		/* hole -> non-hole */
 
 		/* Contiguous blocks? */
+
+		/*一些块在磁盘上不相邻*/
 		if (page_block && blocks[page_block-1] != bh.b_blocknr-1)
 			goto confused;
 		blocks[page_block] = bh.b_blocknr;
 		bdev = bh.b_bdev;
 	}
 
+	/*此处，说明页中所有块在磁盘上是相邻的*/
+	/*可能是文件中的最后一页，页中的一些块可能在磁盘上没有映射*/
 	if (first_hole != blocks_per_page) {
 		char *kaddr = kmap_atomic(page, KM_USER0);
+		/*将页中相应的块缓冲区填0*/
 		memset(kaddr + (first_hole << blkbits), 0,
 				PAGE_CACHE_SIZE - (first_hole << blkbits));
 		flush_dcache_page(page);
@@ -310,9 +334,12 @@ out:
 	return bio;
 
 confused:
+	/*页中含有的块在磁盘上不连续*/
 	if (bio)
 		bio = mpage_bio_submit(READ, bio);
+	/*页不是最新的*/
 	if (!PageUptodate(page))
+		/*一次读一块的方式读该页*/
 	        block_read_full_page(page, get_block);
 	else
 		unlock_page(page);
@@ -356,6 +383,12 @@ EXPORT_SYMBOL(mpage_readpages);
 /*
  * This isn't called much at all
  */
+
+/*
+ * 普通文件的readpage方法
+ * 参数：struct page *page---待填充页的页描述符
+ * 	 get_block_t get_block---有助于mpage_readpage()找到正确块的函数的地址
+ * */
 int mpage_readpage(struct page *page, get_block_t get_block)
 {
 	struct bio *bio = NULL;
@@ -521,6 +554,7 @@ page_is_mapped:
 
 alloc_new:
 	if (bio == NULL) {
+		/*分配包含单一段的一个新bio描述符*/
 		bio = mpage_alloc(bdev, blocks[0] << (blkbits - 9),
 				bio_get_nr_vecs(bdev), GFP_NOFS|__GFP_HIGH);
 		if (bio == NULL)

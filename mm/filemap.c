@@ -734,6 +734,10 @@ void do_generic_mapping_read(struct address_space *mapping,
 			     read_descriptor_t *desc,
 			     read_actor_t actor)
 {
+	/*
+	 * 获得地址空间对象的所有者，它将拥有填充了文件数据的页面
+	 * 若文件时块设备文件，所有者是bdev特殊文件系统中的索引节点对象
+	 * */
 	struct inode *inode = mapping->host;
 	unsigned long index;
 	unsigned long end_index;
@@ -747,10 +751,15 @@ void do_generic_mapping_read(struct address_space *mapping,
 	struct file_ra_state ra = *_ra;
 
 	cached_page = NULL;
+	/*
+	 * 把文件看成细分的数据页(每页4096字节)
+	 * 导出第一个请求字节所在页的逻辑号，即地址空间的索引
+	 * */
 	index = *ppos >> PAGE_CACHE_SHIFT;
 	next_index = index;
 	prev_index = ra.prev_page;
 	req_size = (desc->count + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
+	/*第一个请求字节在页内的偏移量存放在offset局部变量中*/
 	offset = *ppos & ~PAGE_CACHE_MASK;
 
 	isize = i_size_read(inode);
@@ -758,12 +767,14 @@ void do_generic_mapping_read(struct address_space *mapping,
 		goto out;
 
 	end_index = (isize - 1) >> PAGE_CACHE_SHIFT;
+	/*读入包含请求字节的所有页，要读数据的字节数存放在read_descriptor_t描述符的count字段值中*/
 	for (;;) {
 		struct page *page;
 		unsigned long ret_size, nr, ret;
 
 		/* nr is the maximum number of bytes to copy from this page */
 		nr = PAGE_CACHE_SIZE;
+		/*超过文件大小*/
 		if (index >= end_index) {
 			if (index > end_index)
 				goto out;
@@ -774,8 +785,10 @@ void do_generic_mapping_read(struct address_space *mapping,
 		}
 		nr = nr - offset;
 
+		/*检查当前进程的标志TIF_NEED_RESCHED,若置位，则调用schedule()*/
 		cond_resched();
 		if (index == next_index && req_size) {
+			/*有预读的页*/
 			ret_size = page_cache_readahead(mapping, &ra,
 					filp, index, req_size);
 			next_index += ret_size;
@@ -783,11 +796,18 @@ void do_generic_mapping_read(struct address_space *mapping,
 		}
 
 find_page:
+		/*将查找页高速缓存以找到包含所请求数据的页描述符*/
 		page = find_get_page(mapping, index);
+		/*所请求的页不在页高速缓存中*/
 		if (unlikely(page == NULL)) {
+			/*调整预读系统的参数*/
 			handle_ra_miss(mapping, &ra, index);
 			goto no_cached_page;
 		}
+		/*
+		 * 此处，页已经位于页高速缓存中
+		 * 若PG_update置位，则页所存数据时最新的，无需从磁盘读数据
+		 * */
 		if (!PageUptodate(page))
 			goto page_not_up_to_date;
 page_ok:
@@ -804,7 +824,9 @@ page_ok:
 		 * in succession, only mark it as accessed the first time.
 		 */
 		if (prev_index != index)
+			/*将标志PG_referenced或PG_active置位，从而表示该页正被访问并且不应该被换出*/
 			mark_page_accessed(page);
+		/*使该步骤只在第一次读时执行*/
 		prev_index = index;
 
 		/*
@@ -817,40 +839,68 @@ page_ok:
 		 * "pos" here (the actor routine has to update the user buffer
 		 * pointers and the remaining count).
 		 */
+
+		/*
+		 * 把页中的数据拷贝到用户态缓冲区的时候
+		 * 调用file_read_actor()
+		 * */
 		ret = actor(desc, page, offset, nr);
+		/*
+		 * 根据传入用户态缓冲区的有效字节来更新index和count
+		 * 若页的最后一个自己已拷贝到用户态缓冲区，index +=1; offset = 0
+		 * 否则。index不变，offset为已拷贝到用户态缓冲区的字节数
+		 * */
 		offset += ret;
 		index += offset >> PAGE_CACHE_SHIFT;
 		offset &= ~PAGE_CACHE_MASK;
 
+		/*减少页描述符的引用计数器*/
 		page_cache_release(page);
+		/*count != 0,文件中海油其他数据要读*/
 		if (ret == nr && desc->count)
 			continue;
 		goto out;
 
 page_not_up_to_date:
 		/* Get exclusive access to the page ... */
+		/*对页的互斥访问*/
 		lock_page(page);
 
 		/* Did it get unhashed before we got the lock? */
+
+		/*若另一个进程在锁定页之前将页从页高速缓存中删除*/
 		if (!page->mapping) {
 			unlock_page(page);
+			/*减少引用计数*/
 			page_cache_release(page);
+			/*重读同一页*/
 			continue;
 		}
 
 		/* Did somebody else fill it already? */
+		/*
+		 * 此处，页被锁定且在高速缓存中
+		 * 再次检查PG_update，因为另一个内核控制路径可能已经完成了必要的读操作
+		 * */
 		if (PageUptodate(page)) {
 			unlock_page(page);
+			/*跳过读操作*/
 			goto page_ok;
 		}
 
 readpage:
 		/* Start the actual read. The read will unlock the page. */
+		
+		/*
+		 * 真正的I/O操作
+		 * 激活磁盘到页之间的I/O数据传输
+		 * */
 		error = mapping->a_ops->readpage(filp, page);
 
 		if (unlikely(error))
 			goto readpage_error;
-
+		
+		/*PG_update没有置位*/
 		if (!PageUptodate(page)) {
 			lock_page(page);
 			if (!PageUptodate(page)) {
@@ -879,12 +929,20 @@ readpage:
 		 */
 		isize = i_size_read(inode);
 		end_index = (isize - 1) >> PAGE_CACHE_SHIFT;
+		/*
+		 * index超出文件包含的页数
+		 * 这种情况发生在这个正被本进程读的文件同时又其他进程正在删减它
+		 * */
 		if (unlikely(!isize || index > end_index)) {
 			page_cache_release(page);
 			goto out;
 		}
 
 		/* nr is the maximum number of bytes to copy from this page */
+		/*
+		 * 应被拷入用户态缓冲区的页中的字节数
+		 * 应为页的大小(4096字节)，除非offset != 0 或请求数据不全在该文件中
+		 * */
 		nr = PAGE_CACHE_SIZE;
 		if (index == end_index) {
 			nr = ((isize - 1) & ~PAGE_CACHE_MASK) + 1;
@@ -908,12 +966,17 @@ no_cached_page:
 		 * page..
 		 */
 		if (!cached_page) {
+			/*分配一个新页*/
 			cached_page = page_cache_alloc_cold(mapping);
 			if (!cached_page) {
 				desc->error = -ENOMEM;
 				goto out;
 			}
 		}
+		/*
+		 * 插入该新页描述符到页高速缓存中，该函数将新页的PG_locked置位
+		 * 将新页描述符插入到LRU链表中
+		 * */
 		error = add_to_page_cache_lru(cached_page, mapping,
 						index, GFP_KERNEL);
 		if (error) {
@@ -924,16 +987,23 @@ no_cached_page:
 		}
 		page = cached_page;
 		cached_page = NULL;
+		/*开始读文件数据*/
 		goto readpage;
 	}
 
 out:
+	/*
+	 * 所有请求的或者说可以读到的数据已读完
+	 * 更新预读数据结构来标记数据已被顺序从文件读入
+	 * */
 	*_ra = ra;
 
+	/*保存以后调用read()和write()进行顺序访问的位置*/
 	*ppos = ((loff_t) index << PAGE_CACHE_SHIFT) + offset;
 	if (cached_page)
 		page_cache_release(cached_page);
 	if (filp)
+		/*把当前时间存放在文件的索引节点对象的i_atime中，并把它标记为脏后返回*/
 		file_accessed(filp);
 }
 
@@ -962,8 +1032,14 @@ int file_read_actor(read_descriptor_t *desc, struct page *page,
 	}
 
 	/* Do it the slow way */
+	/*为处于高端内存中的页建立永久的内核映射*/
 	kaddr = kmap(page);
+	/*
+	 * 把页中的数据拷贝到用户态地址空间
+	 * 在访问用户态地址空间时若有缺页异常将会阻塞进程
+	 * */
 	left = __copy_to_user(desc->arg.buf, kaddr + offset, size);
+	/*释放页的任一永久映射*/
 	kunmap(page);
 
 	if (left) {
@@ -971,6 +1047,7 @@ int file_read_actor(read_descriptor_t *desc, struct page *page,
 		desc->error = -EFAULT;
 	}
 success:
+	/*更新描述符*/
 	desc->count = count - size;
 	desc->written += size;
 	desc->arg.buf += size;
