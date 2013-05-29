@@ -408,6 +408,17 @@ blockable_page_cache_readahead(struct address_space *mapping, struct file *filp,
  * page_cache_readahead is the main function.  If performs the adaptive
  * readahead window size management and submits the readahead I/O.
  */
+
+/*
+ * 处理没有被特殊系统调用显式触发的所有预读操作
+ * 它填写当前窗和预读窗，根据预读命中数更新当前窗和预读窗的大小，也就是根据过去对文件访问预读策略的成功程度来调整
+ * 当内核必须满足对某个文件一页或多页的读请求时，函数被调用
+ * 参数：struct address_space *mapping---描述页所有者的address_space对象指针
+ * 	 struct file_ra_state *ra---包含该页的文件file_ra_state描述符指针
+ * 	 struct file *filp---文件对象指针
+ * 	 unsigned long offset---文件内页的偏移量
+ * 	 unsigned long req_size---要完成当前读操作还需要的页数
+ * */
 unsigned long
 page_cache_readahead(struct address_space *mapping, struct file_ra_state *ra,
 		     struct file *filp, unsigned long offset,

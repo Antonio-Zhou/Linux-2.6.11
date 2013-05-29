@@ -602,7 +602,7 @@ struct file {
 	struct address_space	*f_mapping;
 };
 
-/*±£»¤³¬¼¶¿éµÄs_filesÁ´±í±ÜÃâÊÜ¶à´¦ÀíÆ÷ÏµÍ³ÉÏµÄÍ¬Ê±·ÃÎÊ*/
+/*????????????s_filesÁ´???????Ü¶à´¦????ÏµÍ³?Ïµ?Í¬Ê±????*/
 extern spinlock_t files_lock;
 #define file_list_lock() spin_lock(&files_lock);
 #define file_list_unlock() spin_unlock(&files_lock);
@@ -748,9 +748,9 @@ extern int send_sigurg(struct fown_struct *fown);
 #define MNT_DETACH	0x00000002	/* Just detach from the tree */
 #define MNT_EXPIRE	0x00000004	/* Mark for expiry */
 
-/*³¬¼¶¿é¶ÔÏóÁ´±íµÄµÚÒ»¸öÔªËØ*/
+/*??????????Á´???Äµ?Ò»??Ôª??*/
 extern struct list_head super_blocks;
-/*±£»¤Á´±í±ÜÃâÊÜ¶à´¦ÀíÆ÷ÏµÍ³ÉÏµÄÍ¬Ê±·ÃÎÊ*/
+/*????Á´???????Ü¶à´¦????ÏµÍ³?Ïµ?Í¬Ê±????*/
 extern spinlock_t sb_lock;
 
 #define sb_entry(list)	list_entry((list), struct super_block, s_list)
@@ -1494,8 +1494,6 @@ extern loff_t remote_llseek(struct file *file, loff_t offset, int origin);
 extern int generic_file_open(struct inode * inode, struct file * filp);
 extern int nonseekable_open(struct inode * inode, struct file * filp);
 
-/*
- * ¿¿¿¿¿¿¿¿¿¿¿¿¿¿¿¿¿¿¿¿¿¿¿*/
 static inline void do_generic_file_read(struct file * filp, loff_t *ppos,
 					read_descriptor_t * desc,
 					read_actor_t actor)

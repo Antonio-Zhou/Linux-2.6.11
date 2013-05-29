@@ -2363,6 +2363,13 @@ ssize_t generic_file_aio_write(struct kiocb *iocb, const char __user *buf,
 }
 EXPORT_SYMBOL(generic_file_aio_write);
 
+/*
+ * 许多文件系统(Ext3 JFS)通过该函数来实现文件对象的write方法
+ * 参数：struct file *file---文件对象指针
+ * 	 const char __user *buf---用户态空间中的地址，必须从这个地址获取要写入文件的字符
+ * 	 ssize_t count---要写入的字符个数
+ * 	 loff_t *ppos---存放文件偏移量的变量地址，必须从这个偏移量出开始写入
+ * */
 ssize_t generic_file_write(struct file *file, const char __user *buf,
 			   size_t count, loff_t *ppos)
 {
