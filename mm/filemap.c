@@ -279,6 +279,7 @@ int sync_page_range(struct inode *inode, struct address_space *mapping,
 	ret = filemap_fdatawrite_range(mapping, pos, pos + count - 1);
 	if (ret == 0) {
 		down(&inode->i_sem);
+		/*将索引节点和相关缓冲区刷新到磁盘*/
 		ret = generic_osync_inode(inode, mapping, OSYNC_METADATA);
 		up(&inode->i_sem);
 	}
@@ -1800,13 +1801,24 @@ __grab_cache_page(struct address_space *mapping, unsigned long index,
 	int err;
 	struct page *page;
 repeat:
+	/*
+	 * 在页高速缓存中搜索该页
+	 * 找到就增加引用计数，并将PG_locked置位
+	 * */
 	page = find_lock_page(mapping, index);
+	/*该页不再页高速缓存*/
 	if (!page) {
 		if (!*cached_page) {
+			/*分配一个新页框*/
 			*cached_page = page_cache_alloc(mapping);
 			if (!*cached_page)
 				return NULL;
 		}
+		/*
+		 * 在高速缓存内插入此页
+	 	 * 增加引用计数，并将PG_locked置位
+		 * 还在内存管理区的非活动链表中插入一页
+		 * */
 		err = add_to_page_cache(*cached_page, mapping,
 					index, GFP_KERNEL);
 		if (err == -EEXIST)
@@ -1873,8 +1885,12 @@ filemap_copy_from_user(struct page *page, unsigned long offset,
 
 	if (left != 0) {
 		/* Do it the slow way */
+
+		/*建立用户态缓冲区的内核映射*/
 		kaddr = kmap(page);
+		/*把用户态缓冲区中的字符拷贝到页中*/
 		left = __copy_from_user(kaddr + offset, buf, bytes);
+		/*释放内核映射*/
 		kunmap(page);
 	}
 	return bytes - left;
@@ -1963,6 +1979,7 @@ filemap_set_next_iovec(const struct iovec **iovp, size_t *basep, size_t bytes)
 inline int generic_write_checks(struct file *file, loff_t *pos, size_t *count, int isblk)
 {
 	struct inode *inode = file->f_mapping->host;
+	/*per 用户上限*/
 	unsigned long limit = current->signal->rlim[RLIMIT_FSIZE].rlim_cur;
 
         if (unlikely(*pos < 0))
@@ -1976,6 +1993,10 @@ inline int generic_write_checks(struct file *file, loff_t *pos, size_t *count, i
 
 	if (!isblk) {
 		/* FIXME: this is for backwards compatibility with 2.4 */
+		/*
+		 * O_APPEND置位，并且是普通文件，
+		 * 将*pos设为文件尾，从而新数据将都追加到文件的后面
+		 * */
 		if (file->f_flags & O_APPEND)
                         *pos = i_size_read(inode);
 
@@ -1993,6 +2014,7 @@ inline int generic_write_checks(struct file *file, loff_t *pos, size_t *count, i
 	/*
 	 * LFS rule
 	 */
+	/*不是大型文件*/
 	if (unlikely(*pos + *count > MAX_NON_LFS &&
 				!(file->f_flags & O_LARGEFILE))) {
 		if (*pos >= MAX_NON_LFS) {
@@ -2012,6 +2034,7 @@ inline int generic_write_checks(struct file *file, loff_t *pos, size_t *count, i
 	 * Linus frestrict idea will clean these up nicely..
 	 */
 	if (likely(!isblk)) {
+		/*文件系统上限*/
 		if (unlikely(*pos >= inode->i_sb->s_maxbytes)) {
 			if (*count || *pos > inode->i_sb->s_maxbytes) {
 				send_sig(SIGXFSZ, current, 0);
@@ -2106,6 +2129,7 @@ generic_file_buffered_write(struct kiocb *iocb, const struct iovec *iov,
 		buf = iov->iov_base + iov_base;
 	}
 
+	/*循环，以更新写操作中涉及的所有文件页*/
 	do {
 		unsigned long index;
 		unsigned long offset;
@@ -2131,6 +2155,10 @@ generic_file_buffered_write(struct kiocb *iocb, const struct iovec *iov,
 			break;
 		}
 
+		/*
+		 * 调用索引节点中address_space对象的prepare_write方法
+		 * 对应的函数会为该页分配和初始化缓冲区首部
+		 * */
 		status = a_ops->prepare_write(file, page, offset, offset+bytes);
 		if (unlikely(status)) {
 			loff_t isize = i_size_read(inode);
@@ -2151,6 +2179,7 @@ generic_file_buffered_write(struct kiocb *iocb, const struct iovec *iov,
 			copied = filemap_copy_from_user_iovec(page, offset,
 						cur_iov, iov_base, bytes);
 		flush_dcache_page(page);
+		/*把基础缓冲区标记为脏，以便随后把它们写到磁盘，*/
 		status = a_ops->commit_write(file, page, offset, offset+bytes);
 		if (likely(copied > 0)) {
 			if (!status)
@@ -2169,14 +2198,18 @@ generic_file_buffered_write(struct kiocb *iocb, const struct iovec *iov,
 		if (unlikely(copied != bytes))
 			if (status >= 0)
 				status = -EFAULT;
+		/*清PG_locked标志，并唤醒等待该页的任何进程*/
 		unlock_page(page);
+		/*为内存回收算法更新页状态*/
 		mark_page_accessed(page);
 		page_cache_release(page);
 		if (status < 0)
 			break;
 		balance_dirty_pages_ratelimited(mapping);
+		/*当前进程的TIF_NEED_RESCHED置位，调用schedule()*/
 		cond_resched();
 	} while (count);
+	/*使*ppos指向最后一个被写入的字符之后的位置*/
 	*ppos = pos;
 
 	if (cached_page)
@@ -2206,6 +2239,14 @@ generic_file_buffered_write(struct kiocb *iocb, const struct iovec *iov,
 }
 EXPORT_SYMBOL(generic_file_buffered_write);
 
+/*
+ * 将涉及的页标记为脏
+ * 参数：struct kiocb *iocb---kiocb描述符地址
+ * 	 const struct iovec *iov---iovec描述符数组的地址
+ * 	 unsigned long nr_segs---数组的长度
+ * 	 loff_t *ppos---文件当前指针
+ * generic_file_write()调用时，iovec描述符数组只有一个元素，描述待写数据的用户态缓冲区
+ * */
 ssize_t
 __generic_file_aio_write_nolock(struct kiocb *iocb, const struct iovec *iov,
 				unsigned long nr_segs, loff_t *ppos)
@@ -2214,6 +2255,10 @@ __generic_file_aio_write_nolock(struct kiocb *iocb, const struct iovec *iov,
 	struct address_space * mapping = file->f_mapping;
 	size_t ocount;		/* original count */
 	size_t count;		/* after file limit checks */
+	/*
+	 * 确定待写文件索引节点对象的地址inode
+	 * 若文件时块设备文件，这就是一个bdev特殊文件系统的索引节点
+	 * */
 	struct inode 	*inode = mapping->host;
 	unsigned long	seg;
 	loff_t		pos;
@@ -2231,6 +2276,7 @@ __generic_file_aio_write_nolock(struct kiocb *iocb, const struct iovec *iov,
 		ocount += iv->iov_len;
 		if (unlikely((ssize_t)(ocount|iv->iov_len) < 0))
 			return -EINVAL;
+		/*确定iovec描述符所描述的用户态缓冲区时有效的*/
 		if (access_ok(VERIFY_READ, iv->iov_base, iv->iov_len))
 			continue;
 		if (seg == 0)
@@ -2246,6 +2292,8 @@ __generic_file_aio_write_nolock(struct kiocb *iocb, const struct iovec *iov,
 	vfs_check_frozen(inode->i_sb, SB_FREEZE_WRITE);
 
 	/* We can write back this queue in page reclaim */
+
+	/*即使相应请求队列时拥塞的，这个设置也会允许当前进程写回由file->f_mapping拥有的脏页*/
 	current->backing_dev_info = mapping->backing_dev_info;
 	written = 0;
 
@@ -2256,10 +2304,16 @@ __generic_file_aio_write_nolock(struct kiocb *iocb, const struct iovec *iov,
 	if (count == 0)
 		goto out;
 
+	/*将文件的suid清0，而且如果是可执行文件的话就将sgid也清0*/
 	err = remove_suid(file->f_dentry);
 	if (err)
 		goto out;
 
+	/*
+	 * 将当前时间存放在inode->mtime(文件写操作的最新时间)
+	 * 也存放在inode->ctime(修改索引节点的最新时间)
+	 * 而且将索引节点对象标记为脏
+	 * */
 	inode_update_time(inode, 1);
 
 	/* coalesce the iovecs and go direct-to-BIO for O_DIRECT */
@@ -2280,6 +2334,7 @@ __generic_file_aio_write_nolock(struct kiocb *iocb, const struct iovec *iov,
 			pos, ppos, count, written);
 out:
 	current->backing_dev_info = NULL;
+	/*写入文件的有效字符数*/
 	return written ? written : err;
 }
 EXPORT_SYMBOL(generic_file_aio_write_nolock);
@@ -2313,7 +2368,9 @@ __generic_file_write_nolock(struct file *file, const struct iovec *iov,
 	struct kiocb kiocb;
 	ssize_t ret;
 
+	/*初始化kicob类型的局部变量*/
 	init_sync_kiocb(&kiocb, file);
+	/*将涉及的页标记为脏，*/
 	ret = __generic_file_aio_write_nolock(&kiocb, iov, nr_segs, ppos);
 	if (ret == -EIOCBQUEUED)
 		ret = wait_on_sync_kiocb(&kiocb);
@@ -2374,18 +2431,29 @@ ssize_t generic_file_write(struct file *file, const char __user *buf,
 			   size_t count, loff_t *ppos)
 {
 	struct address_space *mapping = file->f_mapping;
+	/*所写文件索引节点对象的地址*/
 	struct inode *inode = mapping->host;
 	ssize_t	ret;
+	/*
+	 * 初始化用户态缓冲区的长度
+	 * 用户态缓冲区的地址和长度
+	 * */
 	struct iovec local_iov = { .iov_base = (void __user *)buf,
 					.iov_len = count };
 
+	/*一次只能有一个进程对某个文件发出write()系统调用*/
 	down(&inode->i_sem);
+	/*返回值是写入夫人有效字节*/
 	ret = __generic_file_write_nolock(file, &local_iov, 1, ppos);
 	up(&inode->i_sem);
 
 	if (ret > 0 && ((file->f_flags & O_SYNC) || IS_SYNC(inode))) {
 		ssize_t err;
 
+		/*
+		 * 强制内核将页高速缓存中上面涉及到的所有页刷新,
+		 * 阻塞当前进程直到I/O数据传输结束
+		 * */
 		err = sync_page_range(inode, mapping, *ppos - ret, ret);
 		if (err < 0)
 			ret = err;

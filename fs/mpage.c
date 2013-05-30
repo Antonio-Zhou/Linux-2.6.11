@@ -418,6 +418,7 @@ EXPORT_SYMBOL(mpage_readpage);
  * written, so it can intelligently allocate a suitably-sized BIO.  For now,
  * just allocate full-size (16-page) BIOs.
  */
+
 static struct bio *
 mpage_writepage(struct bio *bio, struct page *page, get_block_t get_block,
 	sector_t *last_block_in_bio, int *ret, struct writeback_control *wbc)
@@ -649,6 +650,10 @@ out:
  * WB_SYNC_ALL then we were called for data integrity and we must wait for
  * existing IO to complete.
  */
+
+/*
+ * I/O数据传输，在基树中寻找脏页，并把它们刷新到磁盘
+ * */
 int
 mpage_writepages(struct address_space *mapping,
 		struct writeback_control *wbc, get_block_t get_block)
@@ -666,6 +671,7 @@ mpage_writepages(struct address_space *mapping,
 	int scanned = 0;
 	int is_range = 0;
 
+	/*若请求队列写阻塞，但进程不希望阻塞，则不向磁盘写任何页就返回*/
 	if (wbc->nonblocking && bdi_write_congested(bdi)) {
 		wbc->encountered_congestion = 1;
 		return 0;
@@ -676,12 +682,17 @@ mpage_writepages(struct address_space *mapping,
 		writepage = mapping->a_ops->writepage;
 
 	pagevec_init(&pvec, 0);
+	/*确定文件首页*/
+	/*进程无需等待I/O数据传输结束*/
 	if (wbc->sync_mode == WB_SYNC_NONE) {
+		/*初识页索引(从上一个写回操作的最后一页开始扫描)*/
 		index = mapping->writeback_index; /* Start from prev offset */
 	} else {
+		/*文件第一页开始扫描*/
 		index = 0;			  /* whole-file sweep */
 		scanned = 1;
 	}
+	/*给定一个文件内的初识位置，函数将它转换为页索引*/
 	if (wbc->start || wbc->end) {
 		index = wbc->start >> PAGE_CACHE_SHIFT;
 		end = wbc->end >> PAGE_CACHE_SHIFT;
@@ -690,12 +701,14 @@ mpage_writepages(struct address_space *mapping,
 	}
 retry:
 	while (!done && (index <= end) &&
+			/*在页高速缓存中查找脏页描述符*/
 			(nr_pages = pagevec_lookup_tag(&pvec, mapping, &index,
 			PAGECACHE_TAG_DIRTY,
 			min(end - index, (pgoff_t)PAGEVEC_SIZE-1) + 1))) {
 		unsigned i;
 
 		scanned = 1;
+		/*对上面得到的每个页描述符*/
 		for (i = 0; i < nr_pages; i++) {
 			struct page *page = pvec.pages[i];
 
@@ -707,8 +720,10 @@ retry:
 			 * mapping
 			 */
 
+			/*锁定该页*/
 			lock_page(page);
 
+			/*确认页是有效的，并在页高速缓存内*/
 			if (unlikely(page->mapping != mapping)) {
 				unlock_page(page);
 				continue;
@@ -723,6 +738,7 @@ retry:
 			if (wbc->sync_mode != WB_SYNC_NONE)
 				wait_on_page_writeback(page);
 
+			/*PG_writeback置位，表明页已被刷新到磁盘*/
 			if (PageWriteback(page) ||
 					!clear_page_dirty_for_io(page)) {
 				unlock_page(page);
@@ -753,6 +769,7 @@ retry:
 		pagevec_release(&pvec);
 		cond_resched();
 	}
+	/*函数没有扫描完给定范围内的所有页，或者写到磁盘的有效页数小于writeback_control描述符中原先给定的值*/
 	if (!scanned && !done) {
 		/*
 		 * We hit the last page and there is more work to be done: wrap
@@ -762,6 +779,10 @@ retry:
 		index = 0;
 		goto retry;
 	}
+	/*
+	 * writeback_control描述符没有给定文件内的初始位置
+	 * 将最后一个扫描页的索引值赋给 mapping->writeback_index
+	 * */
 	if (!is_range)
 		mapping->writeback_index = index;
 	if (bio)

@@ -1778,9 +1778,11 @@ void unmap_underlying_metadata(struct block_device *bdev, sector_t block)
 
 	might_sleep();
 
+	/*在页高速缓存区查找一个旧块*/
 	old_bh = __find_get_block_slow(bdev, block, 0);
 	if (old_bh) {
 		clear_buffer_dirty(old_bh);
+		/*等待该缓冲区的I/O数据传输完毕*/
 		wait_on_buffer(old_bh);
 		clear_buffer_req(old_bh);
 		__brelse(old_bh);
@@ -1999,7 +2001,9 @@ static int __block_prepare_write(struct inode *inode, struct page *page,
 	BUG_ON(from > to);
 
 	blocksize = 1 << inode->i_blkbits;
+	/*不是缓冲区页 PG_Private清0*/
 	if (!page_has_buffers(page))
+		/*为页中所有缓冲区分配缓冲区首部*/
 		create_empty_buffers(page, blocksize, 0);
 	head = page_buffers(page);
 
@@ -2016,14 +2020,20 @@ static int __block_prepare_write(struct inode *inode, struct page *page,
 			}
 			continue;
 		}
+		/*BH_New*/
 		if (buffer_new(bh))
 			clear_buffer_new(bh);
 		if (!buffer_mapped(bh)) {
+			/*
+			 * 调用依赖于文件系统的函数
+			 * 查看这个文件系统磁盘数据结构并查找缓冲区的逻辑块号(相对于磁盘分区而不是普通文件的起始地址)
+			 * */
 			err = get_block(inode, block, bh, 1);
 			if (err)
 				goto out;
 			if (buffer_new(bh)) {
 				clear_buffer_new(bh);
+				/*检查页高速缓存区的某个块设备缓冲区页是否包含指向磁盘同一块的一个缓冲区*/
 				unmap_underlying_metadata(bh->b_bdev,
 							bh->b_blocknr);
 				if (PageUptodate(page)) {
@@ -2051,8 +2061,13 @@ static int __block_prepare_write(struct inode *inode, struct page *page,
 				set_buffer_uptodate(bh);
 			continue; 
 		}
+		/*
+		 * 写操作不对整个缓冲区进行，
+		 * BH_Delay和BH_Uptodate未置位(已在磁盘文件系统数据结构中分配了块，但是RAM中的缓冲区并没有有效的数据映像)
+		 * */
 		if (!buffer_uptodate(bh) && !buffer_delay(bh) &&
 		     (block_start < from || block_end > to)) {
+			/*从磁盘读取它的内容*/
 			ll_rw_block(READ, 1, &bh);
 			*wait_bh++=bh;
 		}
@@ -2061,6 +2076,7 @@ static int __block_prepare_write(struct inode *inode, struct page *page,
 	 * If we issued read requests - let them complete.
 	 */
 	while(wait_bh > wait) {
+		/*阻塞当前进程，直到上步触发的所有读操作全部完成*/
 		wait_on_buffer(*--wait_bh);
 		if (!buffer_uptodate(*wait_bh))
 			return -EIO;
@@ -2408,6 +2424,9 @@ int block_commit_write(struct page *page, unsigned from, unsigned to)
 	return 0;
 }
 
+/*
+ * address_space对象的commit_write方法,几乎适用于所有非日志型磁盘文件系统
+ * */
 int generic_commit_write(struct file *file, struct page *page,
 		unsigned from, unsigned to)
 {
@@ -2418,6 +2437,11 @@ int generic_commit_write(struct file *file, struct page *page,
 	 * No need to use i_size_read() here, the i_size
 	 * cannot change under us because we hold i_sem.
 	 */
+
+	/*
+	 * 检查写操作是否将文件增大
+	 * 若增大，更新文件索引节点对象的i_size对象
+	 * */
 	if (pos > inode->i_size) {
 		i_size_write(inode, pos);
 		mark_inode_dirty(inode);
