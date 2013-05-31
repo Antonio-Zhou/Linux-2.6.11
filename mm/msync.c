@@ -208,14 +208,25 @@ static int msync_interval(struct vm_area_struct * vma,
 	if ((flags & MS_INVALIDATE) && (vma->vm_flags & VM_LOCKED))
 		return -EBUSY;
 
+	/*file == NULL 或者VM_SHARD == 0 --> 这个线性区不是文件的可写共享内存映射*/
 	if (file && (vma->vm_flags & VM_SHARED)) {
+		/*扫描包含在线性区中的线性地址区间所对应的页表项*/
 		ret = filemap_sync(vma, start, end-start, flags);
 
+		/*
+		 * MS_SYNC置位就返回
+		 * 实际作用是将线性区的页标识PG_dirty置位，该系统调用并没有实际开始I/O数据传输
+		 * */
 		if (!ret && (flags & MS_SYNC)) {
 			struct address_space *mapping = file->f_mapping;
 			int err;
 
 			ret = filemap_fdatawrite(mapping);
+			/*
+			 * 检查文件对象的fsync方法是否已定义
+			 * 普通文件---限制自己把文件的索引节点对象刷新到磁盘
+			 * 块设备文件---调用sync_blockdev()，激活该设备所有脏缓冲区的I/O数据传输
+			 * */
 			if (file->f_op && file->f_op->fsync) {
 				/*
 				 * We don't take i_sem here because mmap_sem
@@ -225,6 +236,7 @@ static int msync_interval(struct vm_area_struct * vma,
 				if (err && !ret)
 					ret = err;
 			}
+			/*函数快速扫描覆盖给定线性地址空间的这一部分基树来寻找PG_writeback置位的页*/
 			err = filemap_fdatawait(mapping);
 			if (!ret)
 				ret = err;
@@ -233,6 +245,18 @@ static int msync_interval(struct vm_area_struct * vma,
 	return ret;
 }
 
+/*
+ * msync系统调用的实现,把属于共享内存映射的脏页刷新到磁盘
+ * 参数：unsigned long start---线性地址区间的起始地址
+ * 	 size_t len---区间的长度
+ * 	 int flags---标志
+ * 	 MS_SYNC
+ * 	 	要求这个系统调用挂起进程，直到I/O操作完成。
+ * 	 MS_ASYNC
+ * 	 	要求系统调用立即返回，不用挂起调用进程
+ * 	 MS_INVALIDATE
+ * 	 	要求系统调用使同一文件的其他内存映射无效
+ * */
 asmlinkage long sys_msync(unsigned long start, size_t len, int flags)
 {
 	unsigned long end;

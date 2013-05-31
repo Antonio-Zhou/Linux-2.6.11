@@ -1307,26 +1307,47 @@ static int fastcall page_cache_read(struct file * file, unsigned long offset)
  * it in the page cache, and handles the special cases reasonably without
  * having a lot of duplicated code.
  */
+
+/*
+ * 在处理对磁盘文件进行映射的线性区时，nopage方法必须首先在页高速缓存中查找所请求的页，若没有，则从磁盘上读入
+ * 大部分文件系统的nopage方法。
+ * 参数：struct vm_area_struct * area---所请求页所在线性区的描述符地址
+ * 	 unsigned long address---所请求页的线性地址
+ * 	 int *type---存放函数侦测到的缺页类型(VM_FAULT_MAJOR或VM_FAULT_MINOR)的变量的指针
+ * */
 struct page * filemap_nopage(struct vm_area_struct * area, unsigned long address, int *type)
 {
 	int error;
+	/*文件地址*/
 	struct file *file = area->vm_file;
+	/*address_space对象地址*/
 	struct address_space *mapping = file->f_mapping;
 	struct file_ra_state *ra = &file->f_ra;
+	/*索引节点对象地址*/
 	struct inode *inode = mapping->host;
 	struct page *page;
 	unsigned long size, pgoff, endoff;
 	int did_readaround = 0, majmin = VM_FAULT_MINOR;
 
+	/*确定从address开始的页对应的数据在文件中的偏移量*/
 	pgoff = ((address - area->vm_start) >> PAGE_CACHE_SHIFT) + area->vm_pgoff;
 	endoff = ((area->vm_end - area->vm_start) >> PAGE_CACHE_SHIFT) + area->vm_pgoff;
 
 retry_all:
 	size = (i_size_read(inode) + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
+	/*
+	 * 文件偏移量是否大于文件大小
+	 * 分配新页失败
+	 * */
 	if (pgoff >= size)
 		goto outside_data_content;
 
 	/* If we don't want any read-ahead, don't bother */
+
+	/*
+	 * 线性区的VM_RAND_READ置位
+	 * 假定进程以随机方式读内存映射中的页，忽略预读
+	 * */
 	if (VM_RandomReadHint(area))
 		goto no_cached_page;
 
@@ -1343,18 +1364,31 @@ retry_all:
 	 *
 	 * For sequential accesses, we use the generic readahead logic.
 	 */
+	
+	/*
+	 * 线性区VM_SEQ_READ置位
+	 * 假定进程以严格顺序方式读内存映射中的页
+	 * */
 	if (VM_SequentialReadHint(area))
+		/*从缺页处开始预读*/
 		page_cache_readahead(mapping, ra, file, pgoff, 1);
 
 	/*
 	 * Do we have something in the page cache already?
 	 */
 retry_find:
+	/*在页高速缓存内寻找有address_space对象和文件偏移量标识的页*/
 	page = find_get_page(mapping, pgoff);
+	/*没在页高速缓存中找到页*/
 	if (!page) {
 		unsigned long ra_pages;
 
+	 	/* 
+		 * 线性区VM_SEQ_READ置位
+		 * 强行预读线性区中的页，从而预读算法失败
+		 * */
 		if (VM_SequentialReadHint(area)) {
+			/*调整预读参数*/
 			handle_ra_miss(mapping, ra, pgoff);
 			goto no_cached_page;
 		}
@@ -1364,6 +1398,7 @@ retry_find:
 		 * Do we miss much more than hit in this file? If so,
 		 * stop bothering with read-ahead. It will only hurt.
 		 */
+		/*失败数远大于命中数(ra->mmap_hit),忽略预读*/
 		if (ra->mmap_miss > ra->mmap_hit + MMAP_LOTSAMISS)
 			goto no_cached_page;
 
@@ -1377,18 +1412,22 @@ retry_find:
 		}
 		did_readaround = 1;
 		ra_pages = max_sane_readahead(file->f_ra.ra_pages);
+		/*预读没有永久禁止(file_ra_state描述符的ra_pages > 0)*/
 		if (ra_pages) {
 			pgoff_t start = 0;
 
 			if (pgoff > ra_pages / 2)
 				start = pgoff - ra_pages / 2;
+			/*读入围绕请求页的一组页*/
 			do_page_cache_readahead(mapping, file, start, ra_pages);
 		}
+		/*检查请求页是否在页高速缓存中*/
 		page = find_get_page(mapping, pgoff);
 		if (!page)
 			goto no_cached_page;
 	}
 
+	/*请求页现已在页高速缓存内*/
 	if (!did_readaround)
 		ra->mmap_hit++;
 
@@ -1396,14 +1435,24 @@ retry_find:
 	 * Ok, found a page in the page cache, now we need to check
 	 * that it's up-to-date.
 	 */
+
+	/*页不是最新的*/
 	if (!PageUptodate(page))
+		/*触发I/O数据传输*/
 		goto page_not_uptodate;
 
 success:
 	/*
 	 * Found the page and have a reference on it.
 	 */
+
+	/*标记请求页为访问过*/
 	mark_page_accessed(page);
+	/*
+	 * 若在页高速缓存内找到该页的最新版
+	 * type = VM_FAULT_MINOR
+	 * 否则 type = VM_FAULT_MAJOR
+	 * */
 	if (type)
 		*type = majmin;
 	return page;
@@ -1421,7 +1470,10 @@ no_cached_page:
 	 * We're only likely to ever get here if MADV_RANDOM is in
 	 * effect.
 	 */
+
+	/*检查请求页是否在页高速缓存中，如果不在，就分配一个新页框，追加到页高速缓存*/
 	error = page_cache_read(file, pgoff);
+	/*尽可能为当前进程分配一个交换标记*/
 	grab_swap_token();
 
 	/*
@@ -1611,6 +1663,9 @@ err:
 	return NULL;
 }
 
+/*
+ * 普通文件的populate方法
+ * */
 int filemap_populate(struct vm_area_struct *vma, unsigned long addr,
 		unsigned long len, pgprot_t prot, unsigned long pgoff,
 		int nonblock)
@@ -1623,6 +1678,7 @@ int filemap_populate(struct vm_area_struct *vma, unsigned long addr,
 	struct page *page;
 	int err;
 
+	/*检查MAP_NONBLOCK是否清零*/
 	if (!nonblock)
 		force_page_cache_readahead(mapping, vma->vm_file,
 					pgoff, len >> PAGE_CACHE_SHIFT);

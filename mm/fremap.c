@@ -170,6 +170,15 @@ err_unlock:
  * protection is used. Arbitrary protections might be implemented in the
  * future.
  */
+
+/*
+ * 创建一个非线性内存映射，用户态进程首先以mmap()创建一个常规的共享内存映射,然后调用remap_file_pages()来重新映射内存映射中的一些页
+ * 参数：unsigned long start---调用进程共享文件内存映射区域内的线性地址
+ * 	 unsigned long size---文件重新映射部分的字节数
+ * 	 unsigned long __prot---未用(必须 == 0)
+ * 	 unsigned long pgoff---待映射文件初始页的页索引
+ * 	 unsigned long flags---控制非线性映射的标志
+ * */
 asmlinkage long sys_remap_file_pages(unsigned long start, unsigned long size,
 	unsigned long __prot, unsigned long pgoff, unsigned long flags)
 {
@@ -231,11 +240,13 @@ asmlinkage long sys_remap_file_pages(unsigned long start, unsigned long size,
 			flush_dcache_mmap_lock(mapping);
 			vma->vm_flags |= VM_NONLINEAR;
 			vma_prio_tree_remove(vma, &mapping->i_mmap);
+			/*实际上，该服务例程把线性区插入到文件的i_mmap_nonlinear链表*/
 			vma_nonlinear_insert(vma, &mapping->i_mmap_nonlinear);
 			flush_dcache_mmap_unlock(mapping);
 			spin_unlock(&mapping->i_mmap_lock);
 		}
 
+		/*调用线性区的populate方法*/
 		err = vma->vm_ops->populate(vma, start, size,
 					    vma->vm_page_prot,
 					    pgoff, flags & MAP_NONBLOCK);

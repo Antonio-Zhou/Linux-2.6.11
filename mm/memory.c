@@ -220,8 +220,8 @@ out:
 }
 
 /*
-*	·ÖÅäÒ»¸öÐÂµÄÒ³±í,²¢¸üÐÂÒ³ÖÐ¼äÄ¿Â¼ÖÐÏàÓ¦µÄÄ¿Â¼Ïî
-*/
+ * åˆ†é…ä¸€ä¸ªæ–°çš„é¡µè¡¨,å¹¶æ›´æ–°é¡µä¸­é—´ç›®å½•ä¸­ç›¸åº”çš„ç›®å½•é¡¹
+ * */
 pte_t fastcall * pte_alloc_kernel(struct mm_struct *mm, pmd_t *pmd, unsigned long address)
 {
 	if (!pmd_present(*pmd)) {
@@ -1284,7 +1284,7 @@ static int do_wp_page(struct mm_struct *mm, struct vm_area_struct * vma,
 	unsigned long pfn = pte_pfn(pte);
 	pte_t entry;
 
-	/*ÅÐ¶ÏÒ³µÄ¸´ÖÆÊÇ·ñÕæµÄÓÐ±ØÒª*/
+	/*åˆ¤æ–­é¡µçš„å¤åˆ¶æ˜¯å¦çœŸçš„æœ‰å¿…è¦*/
 	if (unlikely(!pfn_valid(pfn))) {
 		/*
 		 * This should really halt the system so it can be debugged or
@@ -1297,7 +1297,7 @@ static int do_wp_page(struct mm_struct *mm, struct vm_area_struct * vma,
 		spin_unlock(&mm->page_table_lock);
 		return VM_FAULT_OOM;
 	}
-	/*¶à¸ö½ø³Ì¹²ÏíÒ³¿ò*/
+	/*å¤šä¸ªè¿›ç¨‹å…±äº«é¡µæ¡†*/
 	old_page = pfn_to_page(pfn);
 
 	if (!TestSetPageLocked(old_page)) {
@@ -1795,15 +1795,15 @@ do_anonymous_page(struct mm_struct *mm, struct vm_area_struct *vma,
 	struct page * page = ZERO_PAGE(addr);
 
 	/* Read-only mapping of ZERO_PAGE. */
-	/*¶ÁÊ±,ÓÃÁãÒ³µÄÎïÀíµØÖ·ÉèÖÃÒ³±íÏî*/
+	/*è¯»æ—¶,ç”¨é›¶é¡µçš„ç‰©ç†åœ°å€è®¾ç½®é¡µè¡¨é¡¹*/
 	entry = pte_wrprotect(mk_pte(ZERO_PAGE(addr), vma->vm_page_prot));
 
 	/* ..except if it's a write access */
 	if (write_access) {
 		/* Allocate our own private page. */
 		/*
-		*	µÚÒ»´ÎÖ´ÐÐÊÍ·ÅÒ»ÖÖÁÙÊ±ÄÚºËÓ³Éä,
-		*	ËüÓ³ÉäÁËÔÚµ÷ÓÃhandle_pte_fault()º¯ÊýÖ®Ç°ÓÉpte_offset_mapËù½¨Á¢Ò³±íÏîµÄ¸ß¶ËÄÚ´æÎïÀíµØÖ·
+		*	ç¬¬ä¸€æ¬¡æ‰§è¡Œé‡Šæ”¾ä¸€ç§ä¸´æ—¶å†…æ ¸æ˜ å°„,
+		*	å®ƒæ˜ å°„äº†åœ¨è°ƒç”¨handle_pte_fault()å‡½æ•°ä¹‹å‰ç”±pte_offset_mapæ‰€å»ºç«‹é¡µè¡¨é¡¹çš„é«˜ç«¯å†…å­˜ç‰©ç†åœ°å€
 		*/
 		pte_unmap(page_table);
 		spin_unlock(&mm->page_table_lock);
@@ -1823,14 +1823,14 @@ do_anonymous_page(struct mm_struct *mm, struct vm_area_struct *vma,
 			spin_unlock(&mm->page_table_lock);
 			goto out;
 		}
-		/*¼ÇÂ¼·ÖÅä¸ø½ø³ÌµÄÒ³¿ò×ÜÊý*/
+		/*è®°å½•åˆ†é…ç»™è¿›ç¨‹çš„é¡µæ¡†æ€»æ•°*/
 		mm->rss++;
 		acct_update_integrals();
 		update_mem_hiwater();
 		entry = maybe_mkwrite(pte_mkdirty(mk_pte(page,
 							 vma->vm_page_prot)),
 				      vma);
-		/*°ÑÐÂÒ³¿ò²åÈëÓë½»»»Ïà¹ØµÄÊý¾Ý½á¹¹ÖÐ*/
+		/*æŠŠæ–°é¡µæ¡†æ’å…¥ä¸Žäº¤æ¢ç›¸å…³çš„æ•°æ®ç»“æž„ä¸­*/
 		lru_cache_add_active(page);
 		SetPageReferenced(page);
 		page_add_anon_rmap(page, vma, addr);
@@ -1862,9 +1862,9 @@ no_mem:
  */
 
 /*
-*	ÔÚÒ³´ÓÎ´±»·ÃÎÊ»òÒ³ÏßÐÔµØÓ³Éä´ÅÅÌÎÄ¼þÊ±
-*	Îª½ø³Ì·ÖÅä³õÊ¼»¯Ò³¿ò
-*/
+ * åœ¨é¡µä»Žæœªè¢«è®¿é—®æˆ–é¡µçº¿æ€§åœ°æ˜ å°„ç£ç›˜æ–‡ä»¶æ—¶
+ * ä¸ºè¿›ç¨‹åˆ†é…åˆå§‹åŒ–é¡µæ¡†
+ * */
 static int
 do_no_page(struct mm_struct *mm, struct vm_area_struct *vma,
 	unsigned long address, int write_access, pte_t *page_table, pmd_t *pmd)
@@ -1876,9 +1876,9 @@ do_no_page(struct mm_struct *mm, struct vm_area_struct *vma,
 	int ret = VM_FAULT_MINOR;
 	int anon = 0;
 
-	/*ÏßÐÔÇøÃ»ÓÐÓ³Éä´ÅÅÌÎÄ¼þ---ÄäÃûÓ³Éä*/
+	/*çº¿æ€§åŒºæ²¡æœ‰æ˜ å°„ç£ç›˜æ–‡ä»¶---åŒ¿åæ˜ å°„*/
 	if (!vma->vm_ops || !vma->vm_ops->nopage)
-		/*»ñµÃÒ»¸öÐÂµÄÒ³¿ò*/
+		/*èŽ·å¾—ä¸€ä¸ªæ–°çš„é¡µæ¡†*/
 		return do_anonymous_page(mm, vma, page_table,
 					pmd, write_access, address);
 	pte_unmap(page_table);
@@ -1891,6 +1891,7 @@ do_no_page(struct mm_struct *mm, struct vm_area_struct *vma,
 	}
 retry:
 	cond_resched();
+	/*è°ƒç”¨nopage(),è¿”å›žåŒ…å«æ‰€è¯·æ±‚é¡µçš„é¡µæ¡†çš„åœ°å€*/
 	new_page = vma->vm_ops->nopage(vma, address & PAGE_MASK, &ret);
 	/*
 	 * No smp_rmb is needed here as long as there's a full
@@ -1909,11 +1910,14 @@ retry:
 	/*
 	 * Should we do an early C-O-W break?
 	 */
+
+	/*è¿›ç¨‹è¯•å›¾å†™ï¼Œè€Œè¯¥å†…å­˜æ˜ å°„æ˜¯ç§æœ‰çš„*/
 	if (write_access && !(vma->vm_flags & VM_SHARED)) {
 		struct page *page;
 
 		if (unlikely(anon_vma_prepare(vma)))
 			goto oom;
+		/*æŠŠåˆšè¯»å–çš„é¡µæ‹·è´ä¸€ä»½ï¼Œå¹¶æŠŠå®ƒæ’å…¥é¡µçš„éžæ´»åŠ¨é“¾è¡¨ä¸­æ¥é¿å…è¿›ä¸€æ­¥çš„"å†™æ—¶å¤åˆ¶"å¼‚å¸¸*/
 		page = alloc_page_vma(GFP_HIGHUSER, vma, address);
 		if (!page)
 			goto oom;
@@ -1929,6 +1933,8 @@ retry:
 	 * invalidated this page.  If unmap_mapping_range got called,
 	 * retry getting the page.
 	 */
+
+	/*æŸä¸ªè¿›ç¨‹åˆ é™¤ä½œåºŸäº†è¯¥é¡µï¼Œå°è¯•å†æ¬¡èŽ·å–è¯¥é¡µ*/
 	if (mapping && unlikely(sequence != mapping->truncate_count)) {
 		sequence = mapping->truncate_count;
 		spin_unlock(&mm->page_table_lock);
@@ -1950,11 +1956,13 @@ retry:
 	/* Only go through if we didn't race with anybody else... */
 	if (pte_none(*page_table)) {
 		if (!PageReserved(new_page))
+			/*è¡¨ç¤ºä¸€ä¸ªæ–°é¡µæ¡†å·²åˆ†é…ç»™è¿›ç¨‹*/
 			++mm->rss;
 		acct_update_integrals();
 		update_mem_hiwater();
 
 		flush_icache_page(vma, new_page);
+		/*ç”¨æ–°é¡µæ¡†çš„åœ°å€ä»¥åŠçº¿æ€§åŒºçš„vm_page_protä¸­æ‰€åŒ…å«çš„é¡µè®¿é—®æƒæ¥è®¾ç½®ç¼ºé¡µæ‰€åœ¨çš„åœ°å€å¯¹åº”çš„é¡µè¡¨é¡¹*/
 		entry = mk_pte(new_page, vma->vm_page_prot);
 		if (write_access)
 			entry = maybe_mkwrite(pte_mkdirty(entry), vma);
@@ -2041,9 +2049,9 @@ static int do_file_page(struct mm_struct * mm, struct vm_area_struct * vma,
  * release it when done.
  */
 
-/*	
-*	¼ì²éaddressµØÖ·Ëù¶ÔÓ¦µÄÒ³±íÏî,²¢¾ö¶¨ÈçºÎÎª½ø³Ì·ÖÅäÒ»¸öÐÂÒ³¿ò
-*/
+/*
+ * æ£€æŸ¥addressåœ°å€æ‰€å¯¹åº”çš„é¡µè¡¨é¡¹,å¹¶å†³å®šå¦‚ä½•ä¸ºè¿›ç¨‹åˆ†é…ä¸€ä¸ªæ–°é¡µæ¡†
+ * */
 static inline int handle_pte_fault(struct mm_struct *mm,
 	struct vm_area_struct * vma, unsigned long address,
 	int write_access, pte_t *pte, pmd_t *pmd)
@@ -2052,9 +2060,9 @@ static inline int handle_pte_fault(struct mm_struct *mm,
 
 	entry = *pte;
 	/*
-	*	±»·ÃÎÊµÄÒ³²»´æÔÚ,¸ÃÒ³»¹Ã»ÓÐ±»´æ·ÅÔÚÈÎºÎÒ»¸öÒ³¿òÖÐ,
-	*	·ÖÅäÒ»¸öÐÂµÄÒ³¿ò²¢ÊÊµ±³õÊ¼»¯.---ÇëÇóµ÷Ò³
-	*/
+	 * è¢«è®¿é—®çš„é¡µä¸å­˜åœ¨,è¯¥é¡µè¿˜æ²¡æœ‰è¢«å­˜æ”¾åœ¨ä»»ä½•ä¸€ä¸ªé¡µæ¡†ä¸­,
+	 * åˆ†é…ä¸€ä¸ªæ–°çš„é¡µæ¡†å¹¶é€‚å½“åˆå§‹åŒ–.---è¯·æ±‚è°ƒé¡µ
+	 * */
 	if (!pte_present(entry)) {
 		/*
 		 * If it truly wasn't present, we know that kswapd
@@ -2069,9 +2077,9 @@ static inline int handle_pte_fault(struct mm_struct *mm,
 	}
 
 	/*
-	*	±»·ÃÎÊµÄÒ³´æÔÚ,µ«ÊÇ±»±ê¼ÇÎªÖ»¶Á,ËüÒÑ¾­±»´æ·ÅÔÚÒ»¸öÒ³¿òÖÐ,
-	*	·ÖÅäÒ»¸öÐÂµÄÒ³¿ò,²¢°Ñ¾ÉÒ³¿òµÄÊý¾Ý¿½±´µ½ÐÂÒ³¿òÀ´³õÊ¼»¯ËüµÄÄÚÈÝ---Ð´Ê±¸´ÖÆ
-	*/
+	 * è¢«è®¿é—®çš„é¡µå­˜åœ¨,ä½†æ˜¯è¢«æ ‡è®°ä¸ºåªè¯»,å®ƒå·²ç»è¢«å­˜æ”¾åœ¨ä¸€ä¸ªé¡µæ¡†ä¸­,
+	 * åˆ†é…ä¸€ä¸ªæ–°çš„é¡µæ¡†,å¹¶æŠŠæ—§é¡µæ¡†çš„æ•°æ®æ‹·è´åˆ°æ–°é¡µæ¡†æ¥åˆå§‹åŒ–å®ƒçš„å†…å®¹---å†™æ—¶å¤åˆ¶
+	 * */
 	if (write_access) {
 		if (!pte_write(entry))
 			return do_wp_page(mm, vma, address, pte, pmd, entry);
@@ -2091,12 +2099,12 @@ static inline int handle_pte_fault(struct mm_struct *mm,
  */
 
  /*
- *	Èç¹ûÏßÐÔÇøµÄ·ÃÎÊÈ¨ÏÞÓëÒýÆðÒì³£µÄ·ÃÎÊÀàÐÍÏàÆ¥Åä,·ÖÅäÒ»¸öÐÂµÄÒ³¿ò
- *	²ÎÊý:	struct mm_struct *mm---Ö¸ÏòÒì³£·¢ÉúÊ±ÕýÔÚCPUÉÏÔËÐÐµÄ½ø³ÌµÄÄÚ´æÃèÊö·û
- *			struct vm_area_struct * vma---Ö¸ÏòÒýÆðÒì³£µÄÏßÐÔµØÖ·ËùÔÚÏßÐÔÇøµÄÃèÊö·û
-*			unsigned long address---ÒýÆðÒì³£µÄÏßÐÔµØÖ·
-*			int write_access---Èç¹ûtskÊÔÍ¼ÏòaddressÐ´,ÔòÖÃÎª1;Èç¹ûtskÊÔÍ¼ÔÚaddress¶Á»òÖ´ÐÐ,ÔòÖÃÎª0
-*/
+  * å¦‚æžœçº¿æ€§åŒºçš„è®¿é—®æƒé™ä¸Žå¼•èµ·å¼‚å¸¸çš„è®¿é—®ç±»åž‹ç›¸åŒ¹é…,åˆ†é…ä¸€ä¸ªæ–°çš„é¡µæ¡†
+  * å‚æ•°:struct mm_struct *mm---æŒ‡å‘å¼‚å¸¸å‘ç”Ÿæ—¶æ­£åœ¨CPUä¸Šè¿è¡Œçš„è¿›ç¨‹çš„å†…å­˜æè¿°ç¬¦
+  * 	 struct vm_area_struct * vma---æŒ‡å‘å¼•èµ·å¼‚å¸¸çš„çº¿æ€§åœ°å€æ‰€åœ¨çº¿æ€§åŒºçš„æè¿°ç¬¦
+  * 	 unsigned long address---å¼•èµ·å¼‚å¸¸çš„çº¿æ€§åœ°å€
+  * 	 int write_access---å¦‚æžœtskè¯•å›¾å‘addresså†™,åˆ™ç½®ä¸º1;å¦‚æžœtskè¯•å›¾åœ¨addressè¯»æˆ–æ‰§è¡Œ,åˆ™ç½®ä¸º0
+  * */
 int handle_mm_fault(struct mm_struct *mm, struct vm_area_struct * vma,
 		unsigned long address, int write_access)
 {
@@ -2116,29 +2124,30 @@ int handle_mm_fault(struct mm_struct *mm, struct vm_area_struct * vma,
 	 * We need the page table lock to synchronize with kswapd
 	 * and the SMP-safe atomic PTE updates.
 	 */
-	 /*pdg°üº¬ÒýÓÃaddressµÄÒ³È«¾ÖÄ¿Â¼*/
+
+	 /*pdgåŒ…å«å¼•ç”¨addressçš„é¡µå…¨å±€ç›®å½•*/
 	pgd = pgd_offset(mm, address);
 	spin_lock(&mm->page_table_lock);
 
-	/*·ÖÅäÒ»¸öÐÂµÄÒ³ÉÏ¼¶Ä¿Â¼*/
+	/*åˆ†é…ä¸€ä¸ªæ–°çš„é¡µä¸Šçº§ç›®å½•*/
 	pud = pud_alloc(mm, pgd, address);
 	if (!pud)
 		goto oom;
 	
-	/*·ÖÅäÒ»¸öÐÂµÄÒ³ÖÐ¼äÄ¿Â¼*/
+	/*åˆ†é…ä¸€ä¸ªæ–°çš„é¡µä¸­é—´ç›®å½•*/
 	pmd = pmd_alloc(mm, pud, address);
 	if (!pmd)
 		goto oom;
 
-	/*·ÖÅäÒ»¸öÐÂµÄÒ³±í*/
+	/*åˆ†é…ä¸€ä¸ªæ–°çš„é¡µè¡¨*/
 	pte = pte_alloc_map(mm, pmd, address);
 	if (!pte)
 		goto oom;
 
 	/*
-	*	´ËÊ±,pteËùÖ¸ÏòµÄÒ³±íÏî¾ÍÊÇÒýÓÃaddressµÄ±íÏî
-	*	¼ì²éaddressµØÖ·Ëù¶ÔÓ¦µÄÒ³±íÏî,²¢¾ö¶¨ÈçºÎÎª½ø³Ì·ÖÅäÒ»¸öÐÂÒ³¿ò
-	*/
+	 * æ­¤æ—¶,pteæ‰€æŒ‡å‘çš„é¡µè¡¨é¡¹å°±æ˜¯å¼•ç”¨addressçš„è¡¨é¡¹
+	 * æ£€æŸ¥addressåœ°å€æ‰€å¯¹åº”çš„é¡µè¡¨é¡¹,å¹¶å†³å®šå¦‚ä½•ä¸ºè¿›ç¨‹åˆ†é…ä¸€ä¸ªæ–°é¡µæ¡†
+	 * */
 	return handle_pte_fault(mm, vma, address, write_access, pte, pmd);
 
  oom:
@@ -2236,8 +2245,8 @@ out:
 #endif
 
 /*
-*	Á¬Ðø·ÖÅäÏßÐÔÇøµÄËùÓÐÒ³,²¢°ÑËüÃÇËøÔÚRAMÖÐ
-*/
+ * è¿žç»­åˆ†é…çº¿æ€§åŒºçš„æ‰€æœ‰é¡µ,å¹¶æŠŠå®ƒä»¬é”åœ¨RAMä¸­
+ * */
 int make_pages_present(unsigned long addr, unsigned long end)
 {
 	int ret, len, write;
@@ -2252,7 +2261,8 @@ int make_pages_present(unsigned long addr, unsigned long end)
 	if (end > vma->vm_end)
 		BUG();
 	len = (end+PAGE_SIZE-1)/PAGE_SIZE-addr/PAGE_SIZE;
-	/*ÔÚaddrºÍaddr+endÖ®¼äµÄËùÓÐÆðÊ¼ÏßÐÔµØÖ·ÉÏÑ­»·*/
+
+	/*åœ¨addrå’Œaddr+endä¹‹é—´çš„æ‰€æœ‰èµ·å§‹çº¿æ€§åœ°å€ä¸Šå¾ªçŽ¯*/
 	ret = get_user_pages(current, current->mm, addr,
 			len, write, 0, NULL, NULL);
 	if (ret < 0)

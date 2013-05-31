@@ -82,9 +82,9 @@ VM_MASK		= 0x00020000
 #endif
 
 /*
-*	ÔÚÕ»ÖĞ±£´æÖĞ¶Ï´¦Àí³ÌĞò¿ÉÄÜ»áÊ¹ÓÃµÄËùÓĞCPU¼Ä´æÆ÷
-*	eflags,cs,eip,ss,esp ³ıÍâ
-*/
+ * åœ¨æ ˆä¸­ä¿å­˜ä¸­æ–­å¤„ç†ç¨‹åºå¯èƒ½ä¼šä½¿ç”¨çš„æ‰€æœ‰CPUå¯„å­˜å™¨
+ * eflags,cs,eip,ss,esp é™¤å¤–
+ * */
 #define SAVE_ALL \
 	cld; \
 	pushl %es; \
@@ -169,7 +169,7 @@ ret_from_intr:
 	testl $(VM_MASK | 3), %eax
 	jz resume_kernel		# returning to kernel or vm86-space
 	
-	/*»Ö¸´µÄ³ÌĞòÔ­À´ÔËĞĞÔÚÓÃ»§Ì¬*/
+	/*æ¢å¤çš„ç¨‹åºåŸæ¥è¿è¡Œåœ¨ç”¨æˆ·æ€*/
 ENTRY(resume_userspace)
  	cli				# make sure we don't miss an interrupt
 					# setting need_resched or sigpending
@@ -247,23 +247,23 @@ sysenter_past_esp:
 ENTRY(system_call)
 	pushl %eax			# save orig_eax
 	SAVE_ALL
-	GET_THREAD_INFO(%ebp)		#ebxÖĞ´æ·Åµ±Ç°½ø³ÌµÄthread_infoÊı¾İ½á¹¹µÄµØÖ·
+	GET_THREAD_INFO(%ebp)		#ebxä¸­å­˜æ”¾å½“å‰è¿›ç¨‹çš„thread_infoæ•°æ®ç»“æ„çš„åœ°å€
 					# system call tracing in operation
-	#¼ì²éÊÇ·ñÓĞÄ³Ò»µ÷ÊÔ³ÌĞòÕıÔÚ¸ú×ÙÖ´ĞĞ³ÌĞò¶ÔÏµÍ³µ÷ÓÃµÄµ÷ÓÃ
+	#æ£€æŸ¥æ˜¯å¦æœ‰æŸä¸€è°ƒè¯•ç¨‹åºæ­£åœ¨è·Ÿè¸ªæ‰§è¡Œç¨‹åºå¯¹ç³»ç»Ÿè°ƒç”¨çš„è°ƒç”¨
 	testb $(_TIF_SYSCALL_TRACE|_TIF_SYSCALL_AUDIT),TI_flags(%ebp)
 	jnz syscall_trace_entry
-	#¶ÔÓÃ»§Ì¬½ø³Ì´«µİµÄÏµÍ³µ÷ÓÃ¹ş½øĞĞÓĞĞ§ĞÔ¼ì²é
+	#å¯¹ç”¨æˆ·æ€è¿›ç¨‹ä¼ é€’çš„ç³»ç»Ÿè°ƒç”¨å“ˆè¿›è¡Œæœ‰æ•ˆæ€§æ£€æŸ¥
 	cmpl $(nr_syscalls), %eax
 	jae syscall_badsys
 syscall_call:
-	#µ÷ÓÃÓëeaxÖĞËù°üº¬µÄÏµÍ³µ÷ÓÃºÅ¶ÔÓ¦µÄÌØ¶¨·şÎñÀı³Ì
-	#ÒòÎª·ÖÅÉ±íÖĞµÄÃ¿¸ö±íÏîÕ¼ËÄ¸ö×Ö½Ú£¬Òò´Ë°ÑÏµÍ³µ÷ÓÃºÅ³ËÒÔ4,ÔÙ¼ÓÉÏ·ÖÅÉ±íµÄÆğÊ¼µØÖ·
-	#È»ºó´ÓÕâ¸öµØÖÊµ¥Ôª»ñÈ¡Ö¸Ïò·şÎñÀı³ÌµÄÖ¸Õë£¬ÄÚºË¾ÍÕÒµ½ÁËÒªµ÷ÓÃµÄ·şÎñÀı³Ì
+	#è°ƒç”¨ä¸eaxä¸­æ‰€åŒ…å«çš„ç³»ç»Ÿè°ƒç”¨å·å¯¹åº”çš„ç‰¹å®šæœåŠ¡ä¾‹ç¨‹
+	#å› ä¸ºåˆ†æ´¾è¡¨ä¸­çš„æ¯ä¸ªè¡¨é¡¹å å››ä¸ªå­—èŠ‚ï¼Œå› æ­¤æŠŠç³»ç»Ÿè°ƒç”¨å·ä¹˜ä»¥4,å†åŠ ä¸Šåˆ†æ´¾è¡¨çš„èµ·å§‹åœ°å€
+	#ç„¶åä»è¿™ä¸ªåœ°è´¨å•å…ƒè·å–æŒ‡å‘æœåŠ¡ä¾‹ç¨‹çš„æŒ‡é’ˆï¼Œå†…æ ¸å°±æ‰¾åˆ°äº†è¦è°ƒç”¨çš„æœåŠ¡ä¾‹ç¨‹
 	call *sys_call_table(,%eax,4)
-	#½áÊøÊ±£¬´Óeax»ñµÃËüµÄ·µ»ØÖµ£¬²¢°ÑÕâ¸ö·µ»ØÖµ´æ·ÅÔÚÔø±£»¤ÓÃ»§Ì¬eax¼Ä´æÆ÷ÖµµÄÄÇ¸öÕ»µ¥ÔªµÄÎ»ÖÃÉÏ
+	#ç»“æŸæ—¶ï¼Œä»eaxè·å¾—å®ƒçš„è¿”å›å€¼ï¼Œå¹¶æŠŠè¿™ä¸ªè¿”å›å€¼å­˜æ”¾åœ¨æ›¾ä¿æŠ¤ç”¨æˆ·æ€eaxå¯„å­˜å™¨å€¼çš„é‚£ä¸ªæ ˆå•å…ƒçš„ä½ç½®ä¸Š
 	movl %eax,EAX(%esp)		# store the return value
 syscall_exit:
-	#¹Ø±Õ±¾µØÖĞ¶Ï²¢¼ì²éµ±Ç°½ø³ÌµÄthread_info½á¹¹ÖĞµÄ±êÖ¾
+	#å…³é—­æœ¬åœ°ä¸­æ–­å¹¶æ£€æŸ¥å½“å‰è¿›ç¨‹çš„thread_infoç»“æ„ä¸­çš„æ ‡å¿—
 	cli				# make sure we don't miss an interrupt
 					# setting need_resched or sigpending
 					# between sampling and the iret
@@ -316,7 +316,7 @@ syscall_trace_entry:
 	movl $-ENOSYS,EAX(%esp)
 	movl %esp, %eax
 	xorl %edx,%edx
-	#ÔÚÏµÍ³µ÷ÓÃ·şÎñÀı³ÌÖ®Ç°,Í£Ö¹current,²¢Òò´ËÔÊĞíµ÷ÊÔ½ø³ÌÊÕ¼¯¹ØÓÚcurrentµÄĞÅÏ¢
+	#åœ¨ç³»ç»Ÿè°ƒç”¨æœåŠ¡ä¾‹ç¨‹ä¹‹å‰,åœæ­¢current,å¹¶å› æ­¤å…è®¸è°ƒè¯•è¿›ç¨‹æ”¶é›†å…³äºcurrentçš„ä¿¡æ¯
 	call do_syscall_trace
 	movl ORIG_EAX(%esp), %eax
 	cmpl $(nr_syscalls), %eax
@@ -345,7 +345,7 @@ syscall_fault:
 
 	ALIGN
 syscall_badsys:
-	#½«-ENOSYS´æ·ÅÔÚeaxÖĞ£¬µ÷ÓÃresume_userspace£¬ÕâÑù½ø³Ì»Ö¸´ËüÔÚÓÃ»§Ì¬µÄÖ´ĞĞÊ±£¬»áÔÚeaxÖĞ·¢ÏÖÒ»¸ö¸ºµÄ·µ»ØÂë
+	#å°†-ENOSYSå­˜æ”¾åœ¨eaxä¸­ï¼Œè°ƒç”¨resume_userspaceï¼Œè¿™æ ·è¿›ç¨‹æ¢å¤å®ƒåœ¨ç”¨æˆ·æ€çš„æ‰§è¡Œæ—¶ï¼Œä¼šåœ¨eaxä¸­å‘ç°ä¸€ä¸ªè´Ÿçš„è¿”å›ç 
 	movl $-ENOSYS,EAX(%esp)
 	jmp resume_userspace
 
@@ -361,7 +361,7 @@ vector=0
 ENTRY(irq_entries_start)
 .rept NR_IRQS
 	ALIGN
-1:	pushl $vector-256		/*ÒıÓÃÕâ¸öÊıÊ±,*/
+1:	pushl $vector-256		/*å¼•ç”¨è¿™ä¸ªæ•°æ—¶,*/
 	jmp common_interrupt
 .data
 	.long 1b
@@ -371,9 +371,9 @@ vector=vector+1
 
 	ALIGN
 common_interrupt:
-	/*±£´æ¿ÉÄÜÓÃµ½µÄreg*/
+	/*ä¿å­˜å¯èƒ½ç”¨åˆ°çš„reg*/
 	SAVE_ALL
-	/*Õ»¶¥µØÖ·*/
+	/*æ ˆé¡¶åœ°å€*/
 	movl %esp,%eax
 	call do_IRQ
 	jmp ret_from_intr
@@ -395,7 +395,7 @@ ENTRY(divide_error)
 	pushl $do_divide_error
 	ALIGN
 error_code:
-#±£´æ»áÓÃµ½µÄ¼Ä´æÆ÷
+#ä¿å­˜ä¼šç”¨åˆ°çš„å¯„å­˜å™¨
 	pushl %ds
 	pushl %eax
 	xorl %eax, %eax
@@ -406,21 +406,21 @@ error_code:
 	decl %eax			# eax = -1
 	pushl %ecx
 	pushl %ebx
-	cld		#ÇåeflagsµÄ·½Ïò±êÖ¾DF£¬ÒÔÈ·±£µ÷ÓÃ×Ö·û´®Ö¸ÁîÊ±»á×Ô¶¯Ôö¼ÓediºÍesi¼Ä´æÆ÷µÄÖµ
+	cld		#æ¸…eflagsçš„æ–¹å‘æ ‡å¿—DFï¼Œä»¥ç¡®ä¿è°ƒç”¨å­—ç¬¦ä¸²æŒ‡ä»¤æ—¶ä¼šè‡ªåŠ¨å¢åŠ ediå’Œesiå¯„å­˜å™¨çš„å€¼
 	movl %es, %ecx
-	#°Ñesp+32´¦µÄCº¯ÊıµØÖ·×°Èëedi¼Ä´æÆ÷ÖĞ£¬ÔÚÕâ¸öÎ»ÖÃĞ´ÈëesµÄÖµ
+	#æŠŠesp+32å¤„çš„Cå‡½æ•°åœ°å€è£…å…¥ediå¯„å­˜å™¨ä¸­ï¼Œåœ¨è¿™ä¸ªä½ç½®å†™å…¥esçš„å€¼
 	movl ES(%esp), %edi		# get the function address
-	#°ÑÕ»ÖĞÎ»ÓÚesp+36´¦µÄÓ²¼ş³ö´íÂë¿½±´µ½edxÖĞ£¬¸øÕ»ÖĞÕâÒ»Î»ÖÃ´æÉÏÖµ-1£¬ÓÃÀ´°Ñ0x80Òì³£ÓëÆäËûÒì³£¸ôÀë¿ªÀ´
+	#æŠŠæ ˆä¸­ä½äºesp+36å¤„çš„ç¡¬ä»¶å‡ºé”™ç æ‹·è´åˆ°edxä¸­ï¼Œç»™æ ˆä¸­è¿™ä¸€ä½ç½®å­˜ä¸Šå€¼-1ï¼Œç”¨æ¥æŠŠ0x80å¼‚å¸¸ä¸å…¶ä»–å¼‚å¸¸éš”ç¦»å¼€æ¥
 	movl ORIG_EAX(%esp), %edx	# get the error code
 	movl %eax, ORIG_EAX(%esp)
 	movl %ecx, ES(%esp)
 	movl $(__USER_DS), %ecx
-	#°ÑÓÃ»§Êı¾İ¶ÎµÄÑ¡Ôñ·û¿½±´µ½dsºÍes¼Ä´æÆ÷ÖĞ
+	#æŠŠç”¨æˆ·æ•°æ®æ®µçš„é€‰æ‹©ç¬¦æ‹·è´åˆ°dså’Œeså¯„å­˜å™¨ä¸­
 	movl %ecx, %ds
 	movl %ecx, %es
-	#Õ»¶¥¿½±´µ½eax¼Ä´æÆ÷¡£±íÊ¾ÄÚ´æµ¥ÔªµÄµØÖ·£¬ÔÚÕâ¸öµ¥ÔªÖĞ´æ·ÅµÄÊÇµÚÒ»²½±£´æµÄ×îºóÒ»¸ö¼Ä´æÆ÷µÄÖµ
+	#æ ˆé¡¶æ‹·è´åˆ°eaxå¯„å­˜å™¨ã€‚è¡¨ç¤ºå†…å­˜å•å…ƒçš„åœ°å€ï¼Œåœ¨è¿™ä¸ªå•å…ƒä¸­å­˜æ”¾çš„æ˜¯ç¬¬ä¸€æ­¥ä¿å­˜çš„æœ€åä¸€ä¸ªå¯„å­˜å™¨çš„å€¼
 	movl %esp,%eax			# pt_regs pointer
-	#µ÷ÓÃÔÚediÖĞµÄCº¯Êı
+	#è°ƒç”¨åœ¨ediä¸­çš„Cå‡½æ•°
 	call *%edi
 	jmp ret_from_exception
 
@@ -493,7 +493,8 @@ debug_stack_correct:
  * check whether we got an NMI on the debug path where the debug
  * fault happened on the sysenter path.
  */
- /*Ò»µ©Ã¿¸öÊ±ÖÓ½ÚÅÄµ½À´,ËùÓĞCPU,²»¹ÜÆäÕıÔÚ×öÊ²Ã´,¶¼¿ªÊ¼Ö´ĞĞNMIÖĞ¶Ï´¦Àí³ÌĞò*/
+ 
+/*ä¸€æ—¦æ¯ä¸ªæ—¶é’ŸèŠ‚æ‹åˆ°æ¥,æ‰€æœ‰CPU,ä¸ç®¡å…¶æ­£åœ¨åšä»€ä¹ˆ,éƒ½å¼€å§‹æ‰§è¡ŒNMIä¸­æ–­å¤„ç†ç¨‹åº*/
 ENTRY(nmi)
 	cmpl $sysenter_entry,(%esp)
 	je nmi_stack_fixup
@@ -742,7 +743,7 @@ ENTRY(sys_call_table)
 	.long sys_getdents
 	.long sys_select
 	.long sys_flock
-	.long sys_msync
+	.long sys_msync		/*æŠŠå±äºå…±äº«å†…å­˜æ˜ å°„çš„è„é¡µåˆ·æ–°åˆ°ç£ç›˜*/
 	.long sys_readv		/* 145 */
 	.long sys_writev
 	.long sys_getsid
@@ -817,7 +818,7 @@ ENTRY(sys_call_table)
 	.long sys_setfsgid
 	.long sys_pivot_root
 	.long sys_mincore
-	.long sys_madvise
+	.long sys_madvise	/*è°ƒæ•´filemap_nopage()å‡½æ•°çš„é¢„è¯»è¡Œä¸º*/
 	.long sys_getdents64	/* 220 */
 	.long sys_fcntl64
 	.long sys_ni_syscall	/* reserved for TUX */

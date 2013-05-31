@@ -207,8 +207,8 @@ static void remove_vm_struct(struct vm_area_struct *vma)
  */
 
 /*
-*	brk()的系统调用函数
-*/
+ * brk()的系统调用函数
+ * */
 asmlinkage unsigned long sys_brk(unsigned long brk)
 {
 	unsigned long rlim, retval;
@@ -240,15 +240,16 @@ asmlinkage unsigned long sys_brk(unsigned long brk)
 		goto out;
 
 	/* Check against existing mmap mappings. */
+
 	/*扩大后的堆是否和进程的其他线性区相重叠*/
 	if (find_vma_intersection(mm, oldbrk, newbrk+PAGE_SIZE))
 		goto out;
 
 	/* Ok, looks good - let it rip. */
 	/*
-	*	do_brk()是仅处理匿名线性区的do_mmap()的简化版
-	*	do_brk()假定线性区不映射磁盘上的文件，从而避免了检查线性区对象的字段
-	*/
+	 * do_brk()是仅处理匿名线性区的do_mmap()的简化版
+	 * do_brk()假定线性区不映射磁盘上的文件，从而避免了检查线性区对象的字段
+	 * */
 	if (do_brk(oldbrk, newbrk-oldbrk) != oldbrk)
 		goto out;
 set_brk:
@@ -880,8 +881,8 @@ void __vm_stat_account(struct mm_struct *mm, unsigned long flags,
  */
 
 /*
-*	实现匿名线性区
-*/
+ * 实现匿名线性区
+ * */
 unsigned long do_mmap_pgoff(struct file * file, unsigned long addr,
 			unsigned long len, unsigned long prot,
 			unsigned long flags, unsigned long pgoff)
@@ -900,6 +901,10 @@ unsigned long do_mmap_pgoff(struct file * file, unsigned long addr,
 		if (is_file_hugepages(file))
 			accountable = 0;
 
+		/*
+		 * 检查是否为要映射的文件定义mmap文件操作，
+		 * 文件操作表中的mmap值为NULL说明相应的文件不能被映射
+		 * */
 		if (!file->f_op || !file->f_op->mmap)
 			return -ENODEV;
 
@@ -971,6 +976,7 @@ unsigned long do_mmap_pgoff(struct file * file, unsigned long addr,
 
 	if (file) {
 		switch (flags & MAP_TYPE) {
+		/*共享内存映射*/
 		case MAP_SHARED:
 			if ((prot&PROT_WRITE) && !(file->f_mode&FMODE_WRITE))
 				return -EACCES;
@@ -979,12 +985,19 @@ unsigned long do_mmap_pgoff(struct file * file, unsigned long addr,
 			 * Make sure we don't allow writing to an append-only
 			 * file..
 			 */
+			/*
+			 * 共享可写
+			 * 检查文件是为写入而打开的，而不是以追加模式打开的
+			 * */
 			if (IS_APPEND(inode) && (file->f_mode & FMODE_WRITE))
 				return -EACCES;
 
 			/*
 			 * Make sure there are no mandatory locks on the file.
 			 */
+			/*
+			 * 检查文件上没有强制锁
+			 * */
 			if (locks_verify_locked(inode))
 				return -EAGAIN;
 
@@ -1061,11 +1074,12 @@ munmap_back:
 	 * The VM_SHARED test is necessary because shmem_zero_setup
 	 * will create the file object for a shared anonymous map below.
 	 */
+
 	 /*
-	*	映射的不是磁盘上的一个文件
-	*	新区间是私有的
-	*	检查前一个线性区是否可以以这样的方式进行扩展来包含新的区间(vm_flags相同)
-	*/
+	  * 映射的不是磁盘上的一个文件
+	  * 新区间是私有的
+	  * 检查前一个线性区是否可以以这样的方式进行扩展来包含新的区间(vm_flags相同)
+	  * */
 	if (!file && !(vm_flags & VM_SHARED) &&
 	    vma_merge(mm, prev, addr, addr + len, vm_flags,
 					NULL, NULL, pgoff, NULL))
@@ -1198,9 +1212,10 @@ EXPORT_SYMBOL(do_mmap_pgoff);
  * This function "knows" that -ENOMEM has the bits set.
  */
 #ifndef HAVE_ARCH_UNMAPPED_AREA
+
 /*
-*	分配从低端地址向高端地址移动的线性区
-*/
+ * 分配从低端地址向高端地址移动的线性区
+ * */
 unsigned long
 arch_get_unmapped_area(struct file *filp, unsigned long addr,
 		unsigned long len, unsigned long pgoff, unsigned long flags)
@@ -1914,15 +1929,15 @@ int split_vma(struct mm_struct * mm, struct vm_area_struct * vma,
  */
  
 /*
-*	从当前进程的地址空间中删除一个线性地址区间
-*	参数:	struct mm_struct *mm---进程内存描述符的地址
-*			unsigned long start---地址区间的起始地址
-*			size_t len---它的长度
-*	要删除的区间不总是对应一个线性区,它或许是一个线性区的一部分,或许跨越两个或多个线性区
-*	两个主要阶段:
-*	1.扫描进程所拥有的线性区链表,并把包含在进程地址空间的线性地址区间中的所有线性区从链表中解除链接
-*	2.更新进程页表,并把1中找到并标识出的线性区删除
-*/
+ * 从当前进程的地址空间中删除一个线性地址区间
+ * 参数：struct mm_struct *mm---进程内存描述符的地址
+ * 	 unsigned long start---地址区间的起始地址
+ * 	 size_t len---它的长度
+ * 要删除的区间不总是对应一个线性区,它或许是一个线性区的一部分,或许跨越两个或多个线性区
+ * 两个主要阶段:
+ * 1.扫描进程所拥有的线性区链表,并把包含在进程地址空间的线性地址区间中的所有线性区从链表中解除链接
+ * 2.更新进程页表,并把1中找到并标识出的线性区删除
+ * */
 int do_munmap(struct mm_struct *mm, unsigned long start, size_t len)
 {
 	unsigned long end;
@@ -2005,6 +2020,11 @@ int do_munmap(struct mm_struct *mm, unsigned long start, size_t len)
 
 EXPORT_SYMBOL(do_munmap);
 
+/*
+ * 撤销一个内存映射，还可用于减少每种内存区的大小
+ * 参数：unsigned long addr---要删除的线性地址区间中第一个单元的地址
+ * 	 size_t len---要删除的线性地址区间的长度
+ * */
 asmlinkage long sys_munmap(unsigned long addr, size_t len)
 {
 	int ret;
