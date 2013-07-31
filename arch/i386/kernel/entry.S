@@ -844,10 +844,10 @@ ENTRY(sys_call_table)
 	.long sys_sched_getaffinity
 	.long sys_set_thread_area
 	.long sys_get_thread_area
-	.long sys_io_setup	/* 245 */
-	.long sys_io_destroy
+	.long sys_io_setup	/* 245 */	/*为调用进程新建一个新的AIO环境*/
+	.long sys_io_destroy			/*删除AIO环境，还删除包含有AIO环的匿名线性区*/
 	.long sys_io_getevents
-	.long sys_io_submit
+	.long sys_io_submit			/*开始异步I/O操作*/
 	.long sys_io_cancel
 	.long sys_fadvise64	/* 250 */
 	.long sys_ni_syscall

@@ -334,9 +334,17 @@ int filemap_write_and_wait(struct address_space *mapping)
 {
 	int retval = 0;
 
+	/*
+	 * 即使自缓存应用程序是直接访问文件的，系统直接耦合还可能有通过页高速缓存访问文件的其他应用程序
+	 * 为了避免数据的丢失，在启动直接I/O传送之前，磁盘映像要与页高速缓存进行同步
+	 * */
+
+	/*根植于mapping的基树不为空*/
 	if (mapping->nrpages) {
+		/*刷新所有脏页到磁盘，并等待I/O操作结束*/
 		retval = filemap_fdatawrite(mapping);
 		if (retval == 0)
+			/*刷新所有脏页到磁盘，并等待I/O操作结束*/
 			retval = filemap_fdatawait(mapping);
 	}
 	return retval;
@@ -1098,6 +1106,8 @@ __generic_file_aio_read(struct kiocb *iocb, const struct iovec *iov,
 	}
 
 	/* coalesce the iovecs and go direct-to-BIO for O_DIRECT */
+
+	/*检查O_DIRECT是否置位---自缓存应用程序直接访问文件*/
 	if (filp->f_flags & O_DIRECT) {
 		loff_t pos = *ppos, size;
 		struct address_space *mapping;
@@ -1115,8 +1125,10 @@ __generic_file_aio_read(struct kiocb *iocb, const struct iovec *iov,
 			if (retval >= 0 && !is_sync_kiocb(iocb))
 				retval = -EIOCBQUEUED;
 			if (retval > 0)
+				/*更新文件指针*/
 				*ppos = pos + retval;
 		}
+		/*设置对文件索引节点的访问时间戳*/
 		file_accessed(filp);
 		goto out;
 	}
@@ -2558,11 +2570,22 @@ EXPORT_SYMBOL(generic_file_writev);
  * Called under i_sem for writes to S_ISREG files.   Returns -EIO if something
  * went wrong during pagecache shootdown.
  */
+
+/*
+ * 直接I/O传送
+ * 参数：int rw---操作类型：READ或WRITE
+ * 	 struct kiocb *iocb---iocb描述符指针
+ * 	 const struct iovec *iov---iove描述符数组指针
+ * 	 loff_t offset---文件偏移量
+ * 	 unsigned long nr_segs--- iov数组中iovec描述符数
+ * */
 ssize_t
 generic_file_direct_IO(int rw, struct kiocb *iocb, const struct iovec *iov,
 	loff_t offset, unsigned long nr_segs)
 {
+	/*文件对象地址*/
 	struct file *file = iocb->ki_filp;
+	/*address_space对象地址*/
 	struct address_space *mapping = file->f_mapping;
 	ssize_t retval;
 
@@ -2571,7 +2594,13 @@ generic_file_direct_IO(int rw, struct kiocb *iocb, const struct iovec *iov,
 	 * will cause any pte dirty bits to be propagated into the pageframes
 	 * for the subsequent filemap_write_and_wait().
 	 */
+
+	/*
+	 * 操作类型是WRITE
+	 * 一个或多个进程已创建了与文件的某个部分关联的内存映射
+	 * */
 	if (rw == WRITE && mapping_mapped(mapping))
+		/*取消该文件所有页的内存映射*/
 		unmap_mapping_range(mapping, 0, -1, 0);
 
 	retval = filemap_write_and_wait(mapping);
@@ -2579,6 +2608,7 @@ generic_file_direct_IO(int rw, struct kiocb *iocb, const struct iovec *iov,
 		retval = mapping->a_ops->direct_IO(rw, iocb, iov,
 						offset, nr_segs);
 		if (rw == WRITE && mapping->nrpages) {
+			/*扫描mapping基树中所有页并释放它们，同时也清空指向这些页的用户态页表项*/
 			int err = invalidate_inode_pages2(mapping);
 			if (err)
 				retval = err;

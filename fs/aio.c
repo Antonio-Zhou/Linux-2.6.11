@@ -1570,6 +1570,13 @@ out_put_req:
  *	are available to queue any iocbs.  Will return 0 if nr is 0.  Will
  *	fail with -ENOSYS if not implemented.
  */
+
+/*
+ * 开始异步I/O操作
+ * 参数：aio_context_t ctx_id---由io_setup()(标识AIO环境)返回的句柄
+ * 	 long nr---数组长度
+ * 	 struct iocb __user * __user *iocbpp---iocb描述符的指针数组的地址，其中描述符的每项描述一个异步I/O操作
+ * */
 asmlinkage long sys_io_submit(aio_context_t ctx_id, long nr,
 			      struct iocb __user * __user *iocbpp)
 {
@@ -1580,9 +1587,11 @@ asmlinkage long sys_io_submit(aio_context_t ctx_id, long nr,
 	if (unlikely(nr < 0))
 		return -EINVAL;
 
+	/*验证iocbpp描述符数组的有效性*/
 	if (unlikely(!access_ok(VERIFY_READ, iocbpp, (nr*sizeof(*iocbpp)))))
 		return -EFAULT;
 
+	/*在内存描述符的ioctx_list字段对应的链表中查找ctx_id句柄对应的kioctx对象*/
 	ctx = lookup_ioctx(ctx_id);
 	if (unlikely(!ctx)) {
 		pr_debug("EINVAL: io_submit: invalid context id\n");

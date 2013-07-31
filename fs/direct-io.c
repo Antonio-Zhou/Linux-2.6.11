@@ -1175,7 +1175,7 @@ __blockdev_direct_IO(int rw, struct kiocb *iocb, struct inode *inode,
 			goto out;
 	}
 
-	/* Check the memory alignment.  Blocks cannot straddle pages */
+z/* Check the memory alignment.  Blocks cannot straddle pages */
 	for (seg = 0; seg < nr_segs; seg++) {
 		addr = (unsigned long)iov[seg].iov_base;
 		size = iov[seg].iov_len;

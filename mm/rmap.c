@@ -210,9 +210,18 @@ out:
 /*
  * At what user virtual address is page expected in vma?
  */
+
+/*
+ * 计算address的参数
+ * 	1.线性区的起始线性地址---vma->start
+ * 	2.被映射文件的线性区偏移量---vma->vm_pgoff
+ * 	3.被映射文件内的页偏移量---page->index
+ * 	page->index = 区域内的页索引或页的线性地址/PAGE_SIZE
+ * */
 static inline unsigned long
 vma_address(struct page *page, struct vm_area_struct *vma)
 {
+	/*对于匿名页，vm_pgoff = 0或者vm_start/PAGE_SIZE*/
 	pgoff_t pgoff = page->index << (PAGE_CACHE_SHIFT - PAGE_SHIFT);
 	unsigned long address;
 
@@ -499,6 +508,11 @@ void page_remove_rmap(struct page *page)
  * Subfunctions of try_to_unmap: try_to_unmap_one called
  * repeatedly from either try_to_unmap_anon or try_to_unmap_file.
  */
+
+/*
+ * 参数:struct page *page---指向目标页描述符的指针
+ * 	struct vm_area_struct *vma---指向线性区描述符的指针
+ * */
 static int try_to_unmap_one(struct page *page, struct vm_area_struct *vma)
 {
 	struct mm_struct *mm = vma->vm_mm;
@@ -512,6 +526,7 @@ static int try_to_unmap_one(struct page *page, struct vm_area_struct *vma)
 
 	if (!mm->rss)
 		goto out;
+	/*计算待回收页的线性地址*/
 	address = vma_address(page, vma);
 	if (address == -EFAULT)
 		goto out;
@@ -520,8 +535,11 @@ static int try_to_unmap_one(struct page *page, struct vm_area_struct *vma)
 	 * We need the page_table_lock to protect us from page faults,
 	 * munmap, fork, etc...
 	 */
+
+	/*获得保护页表的自旋锁*/
 	spin_lock(&mm->page_table_lock);
 
+	/*获得对应目标页线性地址的页表项地址*/
 	pgd = pgd_offset(mm, address);
 	if (!pgd_present(*pgd))
 		goto out_unlock;
@@ -546,6 +564,8 @@ static int try_to_unmap_one(struct page *page, struct vm_area_struct *vma)
 	 * If it's recently referenced (perhaps page_referenced
 	 * skipped over this mm) then we should reactivate it.
 	 */
+
+	/*验证线性区不是锁定或保留*/
 	if ((vma->vm_flags & (VM_LOCKED|VM_RESERVED)) ||
 			ptep_clear_flush_young(vma, address, pte)) {
 		ret = SWAP_FAIL;
@@ -567,13 +587,20 @@ static int try_to_unmap_one(struct page *page, struct vm_area_struct *vma)
 	 * to drop page lock: its reference to the page stops existing
 	 * ptes from being unmapped, so swapoff can make progress.
 	 */
+
+	/*
+	 * 页是否属于交换高速缓存
+	 * page_mapcount()---include/linux/mm.h
+	 * */
 	if (PageSwapCache(page) &&
 	    page_count(page) != page_mapcount(page) + 2) {
 		ret = SWAP_FAIL;
 		goto out_unmap;
 	}
 
+	/*页可以被回收*/
 	/* Nuke the page table entry. */
+	/*清空页表项,刷新相应的TLB*/
 	flush_cache_page(vma, address);
 	pteval = ptep_clear_flush(vma, address, pte);
 
@@ -581,6 +608,7 @@ static int try_to_unmap_one(struct page *page, struct vm_area_struct *vma)
 	if (pte_dirty(pteval))
 		set_page_dirty(page);
 
+	/*是匿名页。换出页标识符插入页表项，以便将来访问将该页换入*/
 	if (PageAnon(page)) {
 		swp_entry_t entry = { .val = page->private };
 		/*
@@ -599,12 +627,26 @@ static int try_to_unmap_one(struct page *page, struct vm_area_struct *vma)
 		mm->anon_rss--;
 	}
 
+	/*页框计数器递减*/
 	mm->rss--;
 	acct_update_integrals();
+	/*
+	 * mm/rmap.c
+	 * 递减页框使用计数器
+	 * < 0:从活动或非活动链表中删除页描述符
+	 * */
 	page_remove_rmap(page);
+	/*
+	 * 调用free_hot_page()释放页框
+	 * include/linux/pagemap.h-->include/linux/mm.h-->mm/swap.c
+	 * */
 	page_cache_release(page);
 
 out_unmap:
+	/*
+	 * 释放临时内核映射
+	 * pte_offset_map可能分配了
+	 * */
 	pte_unmap(pte);
 out_unlock:
 	spin_unlock(&mm->page_table_lock);
@@ -716,16 +758,27 @@ out_unlock:
 	spin_unlock(&mm->page_table_lock);
 }
 
+/*
+ * 处理匿名页
+ * 回收匿名页时，PFRA必须扫描anon_vma链表中的所有线性区，检查是否每个区域都存在一个匿名页，而其对应的页框就是目标页框
+ * 参数:
+ * 	struct page *page---目标页框描述符
+ * 返回值:
+ * 	SWAP_FAIL---失败
+ * 	SWAP_AGAIN---部分成功
+ * */
 static int try_to_unmap_anon(struct page *page)
 {
 	struct anon_vma *anon_vma;
 	struct vm_area_struct *vma;
 	int ret = SWAP_AGAIN;
 
+	/*获得anon_vma数据结构的自旋锁，page->mapping指向anon_vma*/
 	anon_vma = page_lock_anon_vma(page);
 	if (!anon_vma)
 		return ret;
 
+	/*扫描线性描述符的anon_vma链表*/
 	list_for_each_entry(vma, &anon_vma->head, anon_vma_node) {
 		ret = try_to_unmap_one(page, vma);
 		if (ret == SWAP_FAIL || !page_mapped(page))
@@ -744,6 +797,10 @@ static int try_to_unmap_anon(struct page *page)
  *
  * This function is only called from try_to_unmap for object-based pages.
  */
+
+/*
+ * 处理映射页
+ * */
 static int try_to_unmap_file(struct page *page)
 {
 	struct address_space *mapping = page->mapping;
@@ -847,6 +904,13 @@ out:
  * SWAP_AGAIN	- we missed a mapping, try again later
  * SWAP_FAIL	- the page is unswappable
  */
+
+/*
+ * 尝试清空所有引用该页描述符对应页框的页表项。
+ * SWAP_SUCCESS---成功清除所有对页框的应用
+ * SWAP_AGAIN---有些引用不能被清除
+ * SWAP_FAIL---出错
+ * */
 int try_to_unmap(struct page *page)
 {
 	int ret;
