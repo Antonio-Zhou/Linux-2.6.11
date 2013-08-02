@@ -524,12 +524,20 @@ static void free_more_memory(void)
 	struct zone **zones;
 	pg_data_t *pgdat;
 
+	/*
+	 * 唤醒一个pdflush内核线程，并触发页高速缓存中1024个脏页的写操作
+	 * 写脏页到磁盘的操作，将最终使包含缓冲区，缓冲区首部和其他VFS数据结构的页框成为可释放的。
+	 * */
 	wakeup_bdflush(1024);
+	/*为pdflush内核线程提供执行机会*/
 	yield();
 
+
+	/*对系统的所有内存节点*/
 	for_each_pgdat(pgdat) {
 		zones = pgdat->node_zonelists[GFP_NOFS&GFP_ZONEMASK].zones;
 		if (*zones)
+			/*每个节点*/
 			try_to_free_pages(zones, GFP_NOFS, 0);
 	}
 }

@@ -886,8 +886,8 @@ static void deactivate_task(struct task_struct *p, runqueue_t *rq)
  */
 #ifdef CONFIG_SMP
 /*
-*	抢占进程
-*/
+* 抢占进程
+* */
 static void resched_task(task_t *p)
 {
 	int need_resched, nrpolling;
