@@ -1143,8 +1143,8 @@ static inline void set_tsk_need_resched(struct task_struct *tsk)
 }
 
 /*
-*	清除prev的TIF_NEED_RESCHED标志
-*/
+ * 清除prev的TIF_NEED_RESCHED标志
+ * */
 static inline void clear_tsk_need_resched(struct task_struct *tsk)
 {
 	clear_tsk_thread_flag(tsk,TIF_NEED_RESCHED);

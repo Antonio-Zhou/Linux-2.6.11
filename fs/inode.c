@@ -482,6 +482,11 @@ static void prune_icache(int nr_to_scan)
  * This function is passed the number of inodes to scan, and it returns the
  * total number of remaining possibly-reclaimable inodes.
  */
+
+/*
+ * 从索引节点高速缓存删除未用索引节点对象
+ * "未用"---索引节点不再有一个空值目录项对象
+ * */
 static int shrink_icache_memory(int nr, unsigned int gfp_mask)
 {
 	if (nr) {

@@ -386,6 +386,10 @@ static inline void prune_one_dentry(struct dentry * dentry)
  * all the dentries are in use.
  */
  
+/*
+ * 扫描未用目录项链表，一直到获得请求数量的释放对象或整个链表扫描完毕
+ * 可以有效的进行页框回收
+ * */
 static void prune_dcache(int count)
 {
 	spin_lock(&dcache_lock);
@@ -691,13 +695,31 @@ void shrink_dcache_anon(struct hlist_head *head)
  *
  * In this case we return -1 to tell the caller that we baled.
  */
+
+/*
+ * 目录项高速缓存的shrink函数.
+ * 搜索高速缓存中的未用目录项对象，即没有被任何进程引用的目录项对象，然后释放它们
+ * 目录项高速缓存起索引节点高速缓存控制器的作用。当一个目录项对象被释放时，存放相应索引节点对象的页就可以变为未用，而最终被释放
+ * 参数:int nr---待回收页框数
+ * 	unsigned int gfp_mask---GFP掩码
+ * */
 static int shrink_dcache_memory(int nr, unsigned int gfp_mask)
 {
 	if (nr) {
+		/*检查__GFP_FS是否清0，因为释放目录项可能触发基于磁盘文件系统操作*/
 		if (!(gfp_mask & __GFP_FS))
 			return -1;
+		/*
+		 * 扫描未用目录项链表，一直到获得请求数量的释放对象或整个链表扫描完毕
+		 * 可以有效的进行页框回收
+		 * */
 		prune_dcache(nr);
 	}
+	/*
+	 * sysctl_vfs_cache_pressure == 100
+	 * 可以通过/proc/sys/vm/vfs_cache_pressure修改
+	 * 若 > 100：shrink_slab()从目录项高速缓存回收的页多于从LRU链表中回收的页
+	 * */
 	return (dentry_stat.nr_unused / 100) * sysctl_vfs_cache_pressure;
 }
 

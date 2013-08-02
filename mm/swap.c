@@ -99,6 +99,10 @@ int rotate_reclaimable_page(struct page *page)
 /*
  * FIXME: speed this up?
  */
+
+/*
+ * 检查PG_active标志，若未置位，将页移动到活动列表中，再将PG_active标志置位
+ * */
 void fastcall activate_page(struct page *page)
 {
 	struct zone *zone = page_zone(page);
@@ -120,6 +124,11 @@ void fastcall activate_page(struct page *page)
  * inactive,referenced		->	active,unreferenced
  * active,unreferenced		->	active,referenced
  */
+
+/*
+ * 把一个页标记为访问过
+ * 每当内核决定一个页是被用户态进程，文件系统层还是设备驱动程序引用时
+ * */
 void fastcall mark_page_accessed(struct page *page)
 {
 	if (!PageActive(page) && PageReferenced(page) && PageLRU(page)) {
@@ -139,6 +148,9 @@ EXPORT_SYMBOL(mark_page_accessed);
 static DEFINE_PER_CPU(struct pagevec, lru_add_pvecs) = { 0, };
 static DEFINE_PER_CPU(struct pagevec, lru_add_active_pvecs) = { 0, };
 
+/*
+ * 若页不在LRU链表中，将PG_lru置位，把页插入管理区的非活动链表
+ * */
 void fastcall lru_cache_add(struct page *page)
 {
 	struct pagevec *pvec = &get_cpu_var(lru_add_pvecs);
@@ -149,6 +161,9 @@ void fastcall lru_cache_add(struct page *page)
 	put_cpu_var(lru_add_pvecs);
 }
 
+/*
+ * 若页不在LRU链表中，将PG_lru和PG_active置位，把页插入管理区的活动链表
+ * */
 void fastcall lru_cache_add_active(struct page *page)
 {
 	struct pagevec *pvec = &get_cpu_var(lru_add_active_pvecs);

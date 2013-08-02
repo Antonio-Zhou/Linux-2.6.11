@@ -399,6 +399,10 @@ static int page_referenced_file(struct page *page, int ignore_token)
  * Quick test_and_clear_referenced for all mappings to a page,
  * returns the number of ptes which referenced the page.
  */
+
+/*
+ * PFRA扫描一页调用一次page_referenced()，如果PG_referenced或页表项中的某些Accessed标志置位，则函数返回1，否则返回0。
+ * */
 int page_referenced(struct page *page, int is_locked, int ignore_token)
 {
 	int referenced = 0;
@@ -409,9 +413,11 @@ int page_referenced(struct page *page, int is_locked, int ignore_token)
 	if (page_test_and_clear_young(page))
 		referenced++;
 
+	/*检查页描述符的PG_referenced,并清零*/
 	if (TestClearPageReferenced(page))
 		referenced++;
 
+	/*用面向对象的反向映射方法，对引用该页的所有用户态页表项中的Accessed标志位进行检查并清零*/
 	if (page_mapped(page) && page->mapping) {
 		if (PageAnon(page))
 			referenced += page_referenced_anon(page, ignore_token);
@@ -814,7 +820,9 @@ static int try_to_unmap_file(struct page *page)
 	unsigned int mapcount;
 
 	spin_lock(&mapping->i_mmap_lock);
+	/*搜索树的根---page->mapping->i_mmap*/
 	vma_prio_tree_foreach(vma, &iter, &mapping->i_mmap, pgoff, pgoff) {
+		/*尝试对该页所在的线性区页表项清0*/
 		ret = try_to_unmap_one(page, vma);
 		if (ret == SWAP_FAIL || !page_mapped(page))
 			goto out;
@@ -865,6 +873,7 @@ static int try_to_unmap_file(struct page *page)
 			while (vma->vm_mm->rss &&
 				cursor < max_nl_cursor &&
 				cursor < vma->vm_end - vma->vm_start) {
+				/*扫描该线性区地址所对应的所有页表项，并尝试清0*/
 				try_to_unmap_cluster(cursor, &mapcount, vma);
 				cursor += CLUSTER_SIZE;
 				vma->vm_private_data = (void *) cursor;
