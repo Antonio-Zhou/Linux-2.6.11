@@ -138,30 +138,35 @@ static struct task_struct *dup_task_struct(struct task_struct *orig)
 
 	prepare_to_copy(orig);
 
-	/*ÎªĞÂ½ø³Ì»ñÈ¡½ø³ÌÃèÊö·û,²¢½«½ø³ÌÃèÊö·ûµØÖ·±£´æÔÚtskÖĞ*/
+	/*ä¸ºæ–°è¿›ç¨‹è·å–è¿›ç¨‹æè¿°ç¬¦,å¹¶å°†è¿›ç¨‹æè¿°ç¬¦åœ°å€ä¿å­˜åœ¨tskä¸­*/
 	tsk = alloc_task_struct();
 	if (!tsk)
 		return NULL;
 
-	/*»ñÈ¡Ò»¿é¿ÕÏĞÄÚ´æÇø,ÓÃÀ´´æ·ÅĞÂ½ø³ÌµÄthread_info½á¹¹ºÍÄÚºËÕ»£¬²¢½«µØÖ··ÅÔÚtiÖĞ8KB»ò4KB*/
+	/*è·å–ä¸€å—ç©ºé—²å†…å­˜åŒº,ç”¨æ¥å­˜æ”¾æ–°è¿›ç¨‹çš„thread_infoç»“æ„å’Œå†…æ ¸æ ˆï¼Œå¹¶å°†åœ°å€æ”¾åœ¨tiä¸­8KBæˆ–4KB*/
 	ti = alloc_thread_info(tsk);
 	if (!ti) {
 		free_task_struct(tsk);
 		return NULL;
 	}
 
-	/*½«current½ø³ÌÖĞµÄthread_infoÃèÊö·û¸´ÖÆµ½tiËùÖ¸ÏòµÄ½á¹¹ÖĞ£¬È»ºótsk->thread_infoÖµÎªti
-	½«current½ø³ÌÖĞÃèÊö·û¸´ÖÆµ½tdkËùÖ¸ÏòµÄtask_struct½á¹¹ÖĞ£¬È»ºóti->taskÖµÎªtsk
-	ÕâÁ½¸öË³Ğò¿É»»Âğ?????*/
+	/*
+	 * å°†currentè¿›ç¨‹ä¸­çš„thread_infoæè¿°ç¬¦å¤åˆ¶åˆ°tiæ‰€æŒ‡å‘çš„ç»“æ„ä¸­ï¼Œç„¶åtsk->thread_infoå€¼ä¸ºti
+	 * å°†currentè¿›ç¨‹ä¸­æè¿°ç¬¦å¤åˆ¶åˆ°tdkæ‰€æŒ‡å‘çš„task_structç»“æ„ä¸­ï¼Œç„¶åti->taskå€¼ä¸ºtsk
+	 * è¿™ä¸¤ä¸ªé¡ºåºå¯æ¢å—?????
+	 * */
 	*ti = *orig->thread_info;
 	*tsk = *orig;
 	tsk->thread_info = ti;
 	ti->task = tsk;
 
 	/* One for us, one for whoever does the "release_task()" (usually parent) */
-	/*ĞÂ½ø³ÌÃèÊö·ûµÄÊ¹ÓÃ¼ÆÊıÆ÷ÖÃÎª2
-	ÃèÊö½ø³ÌÃèÊö·ûÕıÔÚ±»Ê¹ÓÃ¶øÇÒÆäÏàÓ¦½ø³Ì´¦ÓÚ»î¶¯×´Ì¬
-	×´Ì¬²»ÊÇEXIT_ZOMBIEºÍEXIT_DEAD*/
+
+	/*
+	 * æ–°è¿›ç¨‹æè¿°ç¬¦çš„ä½¿ç”¨è®¡æ•°å™¨ç½®ä¸º2
+	 * æè¿°è¿›ç¨‹æè¿°ç¬¦æ­£åœ¨è¢«ä½¿ç”¨è€Œä¸”å…¶ç›¸åº”è¿›ç¨‹å¤„äºæ´»åŠ¨çŠ¶æ€
+	 * çŠ¶æ€ä¸æ˜¯EXIT_ZOMBIEå’ŒEXIT_DEAD
+	 * */
 	atomic_set(&tsk->usage,2);
 	return tsk;
 }
@@ -321,14 +326,15 @@ static struct mm_struct * mm_init(struct mm_struct * mm)
 /*
  * Allocate and initialize an mm_struct.
  */
+
  /*
-*	»ñµÃÒ»¸öĞÂµÄÄÚ´æÃèÊö·û
-*/
+  * è·å¾—ä¸€ä¸ªæ–°çš„å†…å­˜æè¿°ç¬¦
+  * */
 struct mm_struct * mm_alloc(void)
 {
 	struct mm_struct * mm;
 
-	/*ÃèÊö·û±»±£´æÔÚsllab·ÖÅäÆ÷¸ßËÙ»º´æÖĞ,Ê¹ÓÃkmem_cache_alloc()³õÊ¼»¯*/
+	/*æè¿°ç¬¦è¢«ä¿å­˜åœ¨sllabåˆ†é…å™¨é«˜é€Ÿç¼“å­˜ä¸­,ä½¿ç”¨kmem_cache_alloc()åˆå§‹åŒ–*/
 	mm = allocate_mm();
 	if (mm) {
 		memset(mm, 0, sizeof(*mm));
@@ -355,8 +361,12 @@ void fastcall __mmdrop(struct mm_struct *mm)
  */
 
 /*
-*	µİ¼õÄÚ´æÃèÊö·ûµÄmm_users,Èç¹û==0,ÊÍ·Å¾Ö²¿ÃèÊö·û±í,ÏßĞÔÇøÃèÊö·û¼°ÓÉÄÚ´æÃèÊö·ûÒıÓÃµÄÒ³±í
-*/
+ * mm_users == 0-->é‡Šæ”¾å±€éƒ¨æè¿°ç¬¦è¡¨,çº¿æ€§åŒºæè¿°ç¬¦åŠç”±å†…å­˜æè¿°ç¬¦å¼•ç”¨çš„é¡µè¡¨
+ * è‹¥è¿›ç¨‹è®¾ç½®äº†äº¤æ¢æ ‡è®°ï¼Œå…ˆå°†æ ‡è®°release
+ * mmput()
+ * 	|---put_swap_token()  include/linux/swap.h
+ * 		|---__put_swap_token()  mm/thrash.c
+ * */
 void mmput(struct mm_struct *mm)
 {
 	if (atomic_dec_and_test(&mm->mm_users)) {
@@ -368,7 +378,7 @@ void mmput(struct mm_struct *mm)
 			spin_unlock(&mmlist_lock);
 		}
 		put_swap_token(mm);
-		/*mm_count -1, Èô==0,ÊÍ·Åmm_struct*/
+		/*mm_count - 1 == 0-->é‡Šæ”¾mm_struct*/
 		mmdrop(mm);
 	}
 }
@@ -778,9 +788,9 @@ static inline void copy_flags(unsigned long clone_flags, struct task_struct *p)
 {
 	unsigned long new_flags = p->flags;
 
-	/*Çå³ıPF_SUPERPRIV,¸Ã±êÖ¾±íÊ¾½ø³ÌÊÇ·ñÊ¹ÓÃÁËÄ³ÖÖ³¬¼¶ÓÃ»§È¨ÏŞ*/
+	/*æ¸…é™¤PF_SUPERPRIV,è¯¥æ ‡å¿—è¡¨ç¤ºè¿›ç¨‹æ˜¯å¦ä½¿ç”¨äº†æŸç§è¶…çº§ç”¨æˆ·æƒé™*/
 	new_flags &= ~PF_SUPERPRIV;
-	/*±íÊ¾×Ó½ø³ÌÃ»ÓĞ·¢³öexecve()ÏµÍ³µ÷ÓÃÊ±*/
+	/*è¡¨ç¤ºå­è¿›ç¨‹æ²¡æœ‰å‘å‡ºexecve()ç³»ç»Ÿè°ƒç”¨æ—¶*/
 	new_flags |= PF_FORKNOEXEC;
 	if (!(clone_flags & CLONE_PTRACE))
 		p->ptrace = 0;
@@ -813,8 +823,8 @@ static task_t *copy_process(unsigned long clone_flags,
 	int retval;
 	struct task_struct *p = NULL;
 
-	/*¼ì²é²ÎÊıclone_flagsËù´«µİ±êÖ¾µÄÒ»ÖÂĞÔ*/
-	/*CLONE_NEWNS CLONE_FS¶¼±»ÉèÖÃ,³ö´í*/
+	/*CLONE_NEWNS CLONE_FSéƒ½è¢«è®¾ç½®,å‡ºé”™*/
+	/*æ£€æŸ¥å‚æ•°clone_flagsæ‰€ä¼ é€’æ ‡å¿—çš„ä¸€è‡´æ€§*/
 	if ((clone_flags & (CLONE_NEWNS|CLONE_FS)) == (CLONE_NEWNS|CLONE_FS))
 		return ERR_PTR(-EINVAL);
 
@@ -822,7 +832,7 @@ static task_t *copy_process(unsigned long clone_flags,
 	 * Thread groups must share signals as well, and detached threads
 	 * can only be started up within the thread group.
 	 */
-	 /*Í¬Ò»Ïß³Ì×éÖĞÇáÁ¿¼¶½ø³Ì±ØĞë¹²ÏíĞÅºÅ*/
+	 /*åŒä¸€çº¿ç¨‹ç»„ä¸­è½»é‡çº§è¿›ç¨‹å¿…é¡»å…±äº«ä¿¡å·*/
 	if ((clone_flags & CLONE_THREAD) && !(clone_flags & CLONE_SIGHAND))
 		return ERR_PTR(-EINVAL);
 
@@ -831,23 +841,23 @@ static task_t *copy_process(unsigned long clone_flags,
 	 * thread groups also imply shared VM. Blocking this case allows
 	 * for various simplifications in other code.
 	 */
-	 /*¹²ÏíĞÅºÅ´¦Àí³ÌĞòµÄÇáÁ¿¼¶½ø³ÌÒ²±ØĞë¹²ÏíÄÚ´æÃèÊö·û*/
+	 /*å…±äº«ä¿¡å·å¤„ç†ç¨‹åºçš„è½»é‡çº§è¿›ç¨‹ä¹Ÿå¿…é¡»å…±äº«å†…å­˜æè¿°ç¬¦*/
 	if ((clone_flags & CLONE_SIGHAND) && !(clone_flags & CLONE_VM))
 		return ERR_PTR(-EINVAL);
 
-	/*Ö´ĞĞËùÓĞ¸½¼ÓµÄ°²È«¼ì²é*/
+	/*æ‰§è¡Œæ‰€æœ‰é™„åŠ çš„å®‰å…¨æ£€æŸ¥*/
 	retval = security_task_create(clone_flags);
 	if (retval)
 		goto fork_out;
 
 	retval = -ENOMEM;
-	/*Îª×Ó½ø³Ì»ñÈ¡½ø³ÌÃèÊö·û*/
+	/*ä¸ºå­è¿›ç¨‹è·å–è¿›ç¨‹æè¿°ç¬¦*/
 	p = dup_task_struct(current);
 	if (!p)
 		goto fork_out;
 
 	retval = -EAGAIN;
-	/*p->signal->rlim[RLIMIT_NPROC].rlim_cur Ğ¡ÓÚµÈÓÚÓÃ»§ËùÓµÓĞµÄ½ø³ÌÊı(´Óuser_structÖĞ»ñµÃ)*/
+	/*p->signal->rlim[RLIMIT_NPROC].rlim_cur <= ç”¨æˆ·æ‰€æ‹¥æœ‰çš„è¿›ç¨‹æ•°(ä»user_structä¸­è·å¾—)*/
 	if (atomic_read(&p->user->processes) >=
 			p->signal->rlim[RLIMIT_NPROC].rlim_cur) {
 		if (!capable(CAP_SYS_ADMIN) && !capable(CAP_SYS_RESOURCE) &&
@@ -855,7 +865,7 @@ static task_t *copy_process(unsigned long clone_flags,
 			goto bad_fork_free;
 	}
 
-	/*µİÔöuser_structµÄÊ¹ÓÃ¼ÆÊıÆ÷ºÍÓÃ»§ËùÓµÓĞ½ø³ÌµÄ¼ÆÊıÆ÷*/
+	/*é€’å¢user_structçš„ä½¿ç”¨è®¡æ•°å™¨å’Œç”¨æˆ·æ‰€æ‹¥æœ‰è¿›ç¨‹çš„è®¡æ•°å™¨*/
 	atomic_inc(&p->user->__count);
 	atomic_inc(&p->user->processes);
 	get_group_info(p->group_info);
@@ -865,8 +875,11 @@ static task_t *copy_process(unsigned long clone_flags,
 	 * triggers too late. This doesn't hurt, the check is only there
 	 * to stop root fork bombs.
 	 */
-	 /*¼ì²éÏµÍ³ÖĞµÄ½ø³ÌÊıÁ¿
-	 max_threadsÈ¡¾öÓÚÏµÍ³ÈİÁ¿´óĞ¡*/
+
+	 /*
+	  * æ£€æŸ¥ç³»ç»Ÿä¸­çš„è¿›ç¨‹æ•°é‡
+	  * max_threadså–å†³äºç³»ç»Ÿå®¹é‡å¤§å°
+	  * */
 	if (nr_threads >= max_threads)
 		goto bad_fork_cleanup_count;
 
@@ -875,20 +888,20 @@ static task_t *copy_process(unsigned long clone_flags,
 
 	if (p->binfmt && !try_module_get(p->binfmt->module))
 		goto bad_fork_cleanup_put_domain;
-
-	p->did_exec = 0;			/*¼ÇÂ¼ÁË½ø³Ì·¢³öexecve()ÏµÍ³µ÷ÓÃµÄ´ÎÊı*/
+	/*è®°å½•äº†è¿›ç¨‹å‘å‡ºexecve()ç³»ç»Ÿè°ƒç”¨çš„æ¬¡æ•°*/
+	p->did_exec = 0;
 	copy_flags(clone_flags, p);
-	/*ĞÂ½ø³ÌPID*/
+	/*æ–°è¿›ç¨‹PID*/
 	p->pid = pid;
 	retval = -EFAULT;
-	/*CLONE_PARENT_SETTID±»ÉèÖÃ£¬×Ó½ø³ÌPID¾Í¸´ÖÆµ½parent_tidptrÖ¸ÏòµÄÓÃ»§Ì¬±äÁ¿*/
+	/*CLONE_PARENT_SETTIDè¢«è®¾ç½®ï¼Œå­è¿›ç¨‹PIDå°±å¤åˆ¶åˆ°parent_tidptræŒ‡å‘çš„ç”¨æˆ·æ€å˜é‡*/
 	if (clone_flags & CLONE_PARENT_SETTID)
 		if (put_user(p->pid, parent_tidptr))
 			goto bad_fork_cleanup;
 
 	p->proc_dentry = NULL;
 
-	/*³õÊ¼»¯list_headºÍ×ÔĞıËø*/
+	/*åˆå§‹åŒ–list_headå’Œè‡ªæ—‹é”*/
 	INIT_LIST_HEAD(&p->children);
 	INIT_LIST_HEAD(&p->sibling);
 	p->vfork_done = NULL;
@@ -915,7 +928,7 @@ static task_t *copy_process(unsigned long clone_flags,
 	p->syscw = 0;		/* I/O counter: write syscalls */
 	acct_clear_integrals(p);
 
-	p->lock_depth = -1;		/* -1 = no lock  ´óÄÚºËËø*/
+	p->lock_depth = -1;		/* -1 = no lock  å¤§å†…æ ¸é”*/
 	do_posix_clock_monotonic_gettime(&p->start_time);
 	p->security = NULL;
 	p->io_context = NULL;
@@ -939,7 +952,7 @@ static task_t *copy_process(unsigned long clone_flags,
 	if ((retval = audit_alloc(p)))
 		goto bad_fork_cleanup_security;
 	/* copy all the process information */
-	/*´´½¨ĞÂµÄÊı¾İ½á¹¹,²¢°Ñ¸¸½ø³ÌÏàÓ¦Êı¾İ½á¹¹µÄÖµ¸´ÖÆµ½ĞÂÊı¾İ½á¹¹ÖĞ,³ı·Ç clone_flagsÖ¸³öËüÃÇÓĞ²»Í¬Öµ*/
+	/*åˆ›å»ºæ–°çš„æ•°æ®ç»“æ„,å¹¶æŠŠçˆ¶è¿›ç¨‹ç›¸åº”æ•°æ®ç»“æ„çš„å€¼å¤åˆ¶åˆ°æ–°æ•°æ®ç»“æ„ä¸­,é™¤é clone_flagsæŒ‡å‡ºå®ƒä»¬æœ‰ä¸åŒå€¼*/
 	if ((retval = copy_semundo(clone_flags, p)))
 		goto bad_fork_cleanup_audit;
 	if ((retval = copy_files(clone_flags, p)))
@@ -973,8 +986,10 @@ static task_t *copy_process(unsigned long clone_flags,
 	 * Syscall tracing should be turned off in the child regardless
 	 * of CLONE_PTRACE.
 	 */
-	 /*Ê¹ret_from_fork()º¯Êı²»»á°ÑÏµÍ³µ÷ÓÃ½áÊøµÄÏûÏ¢Í¨Öª¸øµ÷ÊÔ½ø³Ì
-	ÒòÎª¶Ô×Ó½ø³ÌµÄ¸ú×ÙÊÇÓÉtsk->ptraceÖĞµÄPTRACE_SYSCALL±êÖ¾À´¿ØÖÆµÄ,ËùÒÔ×Ó½ø³ÌµÄÏµÍ³µ÷ÓÃ¸ú×Ù²»»á±»½ûÓÃ*/
+	 /*
+	  * ä½¿ret_from_fork()å‡½æ•°ä¸ä¼šæŠŠç³»ç»Ÿè°ƒç”¨ç»“æŸçš„æ¶ˆæ¯é€šçŸ¥ç»™è°ƒè¯•è¿›ç¨‹
+	  * å› ä¸ºå¯¹å­è¿›ç¨‹çš„è·Ÿè¸ªæ˜¯ç”±tsk->ptraceä¸­çš„PTRACE_SYSCALLæ ‡å¿—æ¥æ§åˆ¶çš„,æ‰€ä»¥å­è¿›ç¨‹çš„ç³»ç»Ÿè°ƒç”¨è·Ÿè¸ªä¸ä¼šè¢«ç¦ç”¨
+	  * */
 	clear_tsk_thread_flag(p, TIF_SYSCALL_TRACE);
 
 	/* Our parent execution domain becomes current domain
@@ -983,13 +998,13 @@ static task_t *copy_process(unsigned long clone_flags,
 	p->parent_exec_id = p->self_exec_id;
 
 	/* ok, now we should be set up.. */
-	/*ÓÃclone_flags²ÎÊıµÍÎ»µÄĞÅºÅÊı×Ö±àÂë³õÊ¼»¯tsk->exit_signal*/
+	/*ç”¨clone_flagså‚æ•°ä½ä½çš„ä¿¡å·æ•°å­—ç¼–ç åˆå§‹åŒ–tsk->exit_signal*/
 	p->exit_signal = (clone_flags & CLONE_THREAD) ? -1 : (clone_flags & CSIGNAL);
 	p->pdeath_signal = 0;
 	p->exit_state = 0;
 
 	/* Perform scheduler related setup */
-	/*Íê³É¶ÔĞÂ½ø³Ìµ÷¶È³ÌĞòÊı¾İ½á¹¹µÄ³õÊ¼»¯*/
+	/*å®Œæˆå¯¹æ–°è¿›ç¨‹è°ƒåº¦ç¨‹åºæ•°æ®ç»“æ„çš„åˆå§‹åŒ–*/
 	sched_fork(p);
 
 	/*
@@ -1011,7 +1026,7 @@ static task_t *copy_process(unsigned long clone_flags,
 	 * the parent's CPU. This avoids alot of nasty races.
 	 */
 	p->cpus_allowed = current->cpus_allowed;
-	/*ÉèÖÃcpu×Ö¶ÎÎª±¾µØCPUºÅ*/
+	/*è®¾ç½®cpuå­—æ®µä¸ºæœ¬åœ°CPUå·*/
 	set_task_cpu(p, smp_processor_id());
 
 	/*
@@ -1025,14 +1040,14 @@ static task_t *copy_process(unsigned long clone_flags,
 	}
 
 	/* CLONE_PARENT re-uses the old parent */
-	/*³õÊ¼»¯±íÊ¾Ç××Ó¹ØÏµµÄ×Ö¶Î*/
+	/*åˆå§‹åŒ–è¡¨ç¤ºäº²å­å…³ç³»çš„å­—æ®µ*/
 	if (clone_flags & (CLONE_PARENT|CLONE_THREAD))
 		p->real_parent = current->real_parent;
 	else
 		p->real_parent = current;
 	p->parent = p->real_parent;
 
-	/*×Ó½ø³ÌÊôÓÚËüµÄ¸¸½ø³ÌµÄÏß³Ì×é*/
+	/*å­è¿›ç¨‹å±äºå®ƒçš„çˆ¶è¿›ç¨‹çš„çº¿ç¨‹ç»„*/
 	if (clone_flags & CLONE_THREAD) {
 		spin_lock(&current->sighand->siglock);
 		/*
@@ -1061,16 +1076,16 @@ static task_t *copy_process(unsigned long clone_flags,
 		spin_unlock(&current->sighand->siglock);
 	}
 
-	/*°ÑĞÂ½ø³ÌÃèÊö·û²å½ø½ø³ÌÁ´±í*/
+	/*æŠŠæ–°è¿›ç¨‹æè¿°ç¬¦æ’è¿›è¿›ç¨‹é“¾è¡¨*/
 	SET_LINKS(p);
-	/*×Ó½ø³Ì±ØĞë±»¸ú×Ù*/
+	/*å­è¿›ç¨‹å¿…é¡»è¢«è·Ÿè¸ª*/
 	if (unlikely(p->ptrace & PT_PTRACED))
 		__ptrace_link(p, current->parent);
 
-	/*ĞÂ½ø³ÌÃèÊö·ûPID²åÈëpidhash[PIDTYPE_PID]É¢ÁĞ±í*/
+	/*æ–°è¿›ç¨‹æè¿°ç¬¦PIDæ’å…¥pidhash[PIDTYPE_PID]æ•£åˆ—è¡¨*/
 	attach_pid(p, PIDTYPE_PID, p->pid);
 	attach_pid(p, PIDTYPE_TGID, p->tgid);
-	/*×Ó½ø³ÌÊÇÏß³Ì×éµÄÁìÍ·½ø³Ì(CLONE_THREADÇå0)*/
+	/*å­è¿›ç¨‹æ˜¯çº¿ç¨‹ç»„çš„é¢†å¤´è¿›ç¨‹(CLONE_THREADæ¸…0)*/
 	if (thread_group_leader(p)) {
 		attach_pid(p, PIDTYPE_PGID, process_group(p));
 		attach_pid(p, PIDTYPE_SID, p->signal->session);
@@ -1078,9 +1093,9 @@ static task_t *copy_process(unsigned long clone_flags,
 			__get_cpu_var(process_counts)++;
 	}
 
-	/*ĞÂ½ø³ÌÒÑ¼ÓÈë½ø³Ì¼¯ºÏ*/
+	/*æ–°è¿›ç¨‹å·²åŠ å…¥è¿›ç¨‹é›†åˆ*/
 	nr_threads++;
-	/*¼ÇÂ¼±»´´½¨µÄ½ø³ÌµÄÊıÁ¿*/
+	/*è®°å½•è¢«åˆ›å»ºçš„è¿›ç¨‹çš„æ•°é‡*/
 	total_forks++;
 	write_unlock_irq(&tasklist_lock);
 	retval = 0;
@@ -1170,29 +1185,39 @@ static inline int fork_traceflag (unsigned clone_flags)
  * It copies the process, and if successful kick-starts
  * it and waits for it to finish using the VM if required.
  */
-long do_fork(unsigned long clone_flags,	/*ÓëcloneµÄ²ÎÊıflagsÏàÍ¬,¸÷ÖÖ¸÷ÑùµÄĞÅÏ¢*/
-	      unsigned long stack_start,			/*ÓëcloneµÄ²ÎÊıchild_stackÏàÍ¬,±íÊ¾°ÑÓÃ»§Ì¬¶ÑÕ»Ö¸Õë¸³¸ø½ø³ÌµÄesp¼°¼Ä´æÆ÷*/
-	      struct pt_regs *regs,				/*Ö¸ÏòÍ¨ÓÃ¼Ä´æÆ÷ÖµµÄÖ¸Õë£¬Í¨ÓÃ¼Ä´æÆ÷µÄÖµÊÇÔÚ´ÓÓÃ»§Ì¬ÇĞ»»µ½ÄÚºËÌ¬Ê±±»±£´æµ½ÄÚºËÌ¬¶ÑÕ»ÖĞµÄ*/
-	      unsigned long stack_size,			/*Î´Ê¹ÓÃ£¬×ÜÊÇ±»ÉèÖÃ³É0*/
-	      int __user *parent_tidptr,			/*ÓëcloneµÄ²ÎÊıptidÏàÍ¬,±íÊ¾¸¸½ø³ÌÓÃ»§Ì¬±äÁ¿µØÖ·,¸Ã¸¸½ø³ÌÓëĞÂÇáÁ¿¼¶½ø³ÌÏàÍ¬µÄPID,Ö»ÓĞÔÚCLONE_PARENT_SETTID±»ÉèÖÃÊ±²ÅÓĞÒâÒå*/
-	      int __user *child_tidptr)			/*ÓëcloneµÄ²ÎÊıctidÏàÍ¬,±íÊ¾ĞÂÇáÁ¿¼¶½ø³ÌÓÃ»§Ì¬±äÁ¿µØÖ·,Ö»ÓĞÔÚCLONE_CHILD_SETTID±»ÉèÖÃÊ±²ÅÓĞÒâÒå*/
+
+/*
+ * forkä¸»å‡½æ•°
+ * å‚æ•°:unsigned long clone_flags---ä¸cloneçš„å‚æ•°flagsç›¸åŒ,å„ç§å„æ ·çš„ä¿¡æ¯
+ * 	unsigned long stack_start---ä¸cloneçš„å‚æ•°child_stackç›¸åŒ,è¡¨ç¤ºæŠŠç”¨æˆ·æ€å †æ ˆæŒ‡é’ˆèµ‹ç»™è¿›ç¨‹çš„espåŠå¯„å­˜å™¨
+ * 	struct pt_regs *regs---æŒ‡å‘é€šç”¨å¯„å­˜å™¨å€¼çš„æŒ‡é’ˆï¼Œé€šç”¨å¯„å­˜å™¨çš„å€¼æ˜¯åœ¨ä»ç”¨æˆ·æ€åˆ‡æ¢åˆ°å†…æ ¸æ€æ—¶è¢«ä¿å­˜åˆ°å†…æ ¸æ€å †æ ˆä¸­çš„
+ * 	unsigned long stack_size---æœªä½¿ç”¨ï¼Œæ€»æ˜¯è¢«è®¾ç½®æˆ0
+ * 	int __user *parent_tidptr---ä¸cloneçš„å‚æ•°ptidç›¸åŒ,è¡¨ç¤ºçˆ¶è¿›ç¨‹ç”¨æˆ·æ€å˜é‡åœ°å€,è¯¥çˆ¶è¿›ç¨‹ä¸æ–°è½»é‡çº§è¿›ç¨‹ç›¸åŒçš„PID,åªæœ‰åœ¨CLONE_PARENT_SETTIDè¢«è®¾ç½®æ—¶æ‰æœ‰æ„ä¹‰
+ * 	int __user *child_tidptr---ä¸cloneçš„å‚æ•°ctidç›¸åŒ,è¡¨ç¤ºæ–°è½»é‡çº§è¿›ç¨‹ç”¨æˆ·æ€å˜é‡åœ°å€,åªæœ‰åœ¨CLONE_CHILD_SETTIDè¢«è®¾ç½®æ—¶æ‰æœ‰æ„ä¹‰
+ * */
+long do_fork(unsigned long clone_flags,
+	      unsigned long stack_start,
+	      struct pt_regs *regs,
+	      unsigned long stack_size,	
+	      int __user *parent_tidptr,
+	      int __user *child_tidptr)	
 {
 	struct task_struct *p;
 	int trace = 0;
-	/*Í¨¹ı²éÕÒpidmap_arrayÍ¼£¬Îª×Ó½ø³Ì·ÖÅäĞÂµÄPID*/
+	/*é€šè¿‡æŸ¥æ‰¾pidmap_arrayå›¾ï¼Œä¸ºå­è¿›ç¨‹åˆ†é…æ–°çš„PID*/
 	long pid = alloc_pidmap();
 
 	if (pid < 0)
 		return -EAGAIN;
-	/*¼ì²éptrace×Ö¶Î£¬Èç¹û²»µÈÓÚ0,ËµÃ÷ÓĞÁíÍâÒ»¸ö½ø³ÌÕıÔÚ¸ú×Ù¸¸½ø³Ì*/
+	/*æ£€æŸ¥ptraceå­—æ®µï¼Œå¦‚æœä¸ç­‰äº0,è¯´æ˜æœ‰å¦å¤–ä¸€ä¸ªè¿›ç¨‹æ­£åœ¨è·Ÿè¸ªçˆ¶è¿›ç¨‹*/
 	if (unlikely(current->ptrace)) {
 		trace = fork_traceflag (clone_flags);
-		/*Èç¹û×Ó½ø³Ì²»ÊÇÄÚºËÏß³Ì(CLONE_UNTRACED±»ÇåÁã),ÄÇÃ´do_fork()ÉèÖÃCLONE_PTRACE*/
+		/*å¦‚æœå­è¿›ç¨‹ä¸æ˜¯å†…æ ¸çº¿ç¨‹(CLONE_UNTRACEDè¢«æ¸…é›¶),é‚£ä¹ˆdo_fork()è®¾ç½®CLONE_PTRACE*/
 		if (trace)
 			clone_flags |= CLONE_PTRACE;
 	}
 
-	/*µ÷ÓÃcopy_process()¸´ÖÆ½ø³ÌÃèÊö·û,·µ»Ø¸Õ´´½¨µÄtask_structÃèÊö·ûµÄµØÖ·*/
+	/*è°ƒç”¨copy_process()å¤åˆ¶è¿›ç¨‹æè¿°ç¬¦,è¿”å›åˆšåˆ›å»ºçš„task_structæè¿°ç¬¦çš„åœ°å€*/
 	p = copy_process(clone_flags, stack_start, regs, stack_size, parent_tidptr, child_tidptr, pid);
 	/*
 	 * Do this prior waking up the new thread - the thread pointer
@@ -1206,32 +1231,34 @@ long do_fork(unsigned long clone_flags,	/*ÓëcloneµÄ²ÎÊıflagsÏàÍ¬,¸÷ÖÖ¸÷ÑùµÄĞÅÏ¢*
 			init_completion(&vfork);
 		}
 
-		/*Èç¹ûÉèÖÃÁËCLONE_STOPPED±êÖ¾£¬»òÕß±ØĞë¸ú×Ù×Ó½ø³Ì(p->ptrace ÖĞÉèÖÃÁË PT_PTRACED)*/
+		/*å¦‚æœè®¾ç½®äº†CLONE_STOPPEDæ ‡å¿—ï¼Œæˆ–è€…å¿…é¡»è·Ÿè¸ªå­è¿›ç¨‹(p->ptrace ä¸­è®¾ç½®äº† PT_PTRACED)*/
 		if ((p->ptrace & PT_PTRACED) || (clone_flags & CLONE_STOPPED)) {
 			/*
 			 * We'll start up with an immediate SIGSTOP.
 			 */
-			/*×Ó½ø³ÌÔö¼Ó¹ÒÆğµÄSIGSTOPĞÅºÅ*/
+			/*å­è¿›ç¨‹å¢åŠ æŒ‚èµ·çš„SIGSTOPä¿¡å·*/
 			sigaddset(&p->pending.signal, SIGSTOP);
 			set_tsk_thread_flag(p, TIF_SIGPENDING);
 		}
 
-		/*Ã»ÓĞÉèÖÃCLONE_STOPPED*/
+		/*æ²¡æœ‰è®¾ç½®CLONE_STOPPED*/
 		if (!(clone_flags & CLONE_STOPPED))
 			wake_up_new_task(p, clone_flags);
 		else
-			 /*×Ó½ø³ÌµÄ×´Ì¬±»ÉèÖÃ³ÉTASK_STOPPED
-			´ËÊ±ÔÚÁíÍâÒ»¸ö½ø³Ì½«×Ó½ø³ÌµÄ×´Ì¬»Ö¸´ÎªTASK_RUNNINGÖ®Ç°(Í¨³£ÊÇSIGCONTĞÅºÅ),×Ó½ø³Ì½«Ò»Ö±±£³ÖTASK_STOPPED*/
+			 /*
+			  * å­è¿›ç¨‹çš„çŠ¶æ€è¢«è®¾ç½®æˆTASK_STOPPED
+			  * æ­¤æ—¶åœ¨å¦å¤–ä¸€ä¸ªè¿›ç¨‹å°†å­è¿›ç¨‹çš„çŠ¶æ€æ¢å¤ä¸ºTASK_RUNNINGä¹‹å‰(é€šå¸¸æ˜¯SIGCONTä¿¡å·),å­è¿›ç¨‹å°†ä¸€ç›´ä¿æŒTASK_STOPPED
+			  * */
 			p->state = TASK_STOPPED;
 
-		/*Èç¹û¸¸½ø³Ì±»¸ú×Ù,°Ñ×Ó½ø³ÌµÄPID´æÈëcurrent->ptrace_message,²¢µ÷ÓÃptrace_notify*/
+		/*å¦‚æœçˆ¶è¿›ç¨‹è¢«è·Ÿè¸ª,æŠŠå­è¿›ç¨‹çš„PIDå­˜å…¥current->ptrace_message,å¹¶è°ƒç”¨ptrace_notify*/
 		if (unlikely (trace)) {
 			current->ptrace_message = pid;
-			/*Ê¹µ±Ç°½ø³ÌÍ£Ö¹ÔËĞĞ£¬²¢Ïòµ±Ç°½ø³Ì¸¸½ø³Ì·¢ËÍSIGCHLDĞÅºÅ*/
+			/*ä½¿å½“å‰è¿›ç¨‹åœæ­¢è¿è¡Œï¼Œå¹¶å‘å½“å‰è¿›ç¨‹çˆ¶è¿›ç¨‹å‘é€SIGCHLDä¿¡å·*/
 			ptrace_notify ((trace << 8) | SIGTRAP);
 		}
 
-		/*Èç¹ûÉèÖÃÁË CLONE_VFORK,°Ñ¸¸½ø³Ì²åÈëµÈ´ı¶ÓÁĞ,²¢¹ÒÆğ¸¸½ø³ÌÖ±µ½×Ó½ø³ÌÊÍ·Å×Ô¼ºµÄÄÚ´æµØÖ·¿Õ¼ä(¼´:×Ó½ø³Ì½áÊø»òÕßÖ´ĞĞĞÂ³ÌĞò)*/
+		/*å¦‚æœè®¾ç½®äº† CLONE_VFORK,æŠŠçˆ¶è¿›ç¨‹æ’å…¥ç­‰å¾…é˜Ÿåˆ—,å¹¶æŒ‚èµ·çˆ¶è¿›ç¨‹ç›´åˆ°å­è¿›ç¨‹é‡Šæ”¾è‡ªå·±çš„å†…å­˜åœ°å€ç©ºé—´(å³:å­è¿›ç¨‹ç»“æŸæˆ–è€…æ‰§è¡Œæ–°ç¨‹åº)*/
 		if (clone_flags & CLONE_VFORK) {
 			wait_for_completion(&vfork);
 			if (unlikely (current->ptrace & PT_TRACE_VFORK_DONE))

@@ -63,16 +63,16 @@ EXPORT_SYMBOL(nr_swap_pages);
  */
 
 /*
-*	Æô¶¯Ê±,ËùÓĞÄÚ´æ½ÚµãµÄËùÓĞ¹ÜÀíÇøÃèÊö·ûµÄµØÖ·³õÊ¼»¯Õâ¸öÊı×é
-*/
+ * å¯åŠ¨æ—¶,æ‰€æœ‰å†…å­˜èŠ‚ç‚¹çš„æ‰€æœ‰ç®¡ç†åŒºæè¿°ç¬¦çš„åœ°å€åˆå§‹åŒ–è¿™ä¸ªæ•°ç»„
+ * */
 struct zone *zone_table[1 << (ZONES_SHIFT + NODES_SHIFT)];
 EXPORT_SYMBOL(zone_table);
 
 static char *zone_names[MAX_NR_ZONES] = { "DMA", "Normal", "HighMem" };
 /*
-*	±£ÁôÄÚ´æµÄÊıÁ¿
-*	ÔÚÄÚºË³õÊ¼»¯Ê±ÉèÖÃ,È¡¾öÓÚ°üº¬ÔÚZONE_DMAºÍZONE_NORMALÄÚ´æ¹ÜÀíÇøÄÚµÄÒ³¿òÊı
-*/
+ * ä¿ç•™å†…å­˜çš„æ•°é‡
+ * åœ¨å†…æ ¸åˆå§‹åŒ–æ—¶è®¾ç½®,å–å†³äºåŒ…å«åœ¨ZONE_DMAå’ŒZONE_NORMALå†…å­˜ç®¡ç†åŒºå†…çš„é¡µæ¡†æ•°
+ * */
 int min_free_kbytes = 1024;
 
 unsigned long __initdata nr_kernel_pages;
@@ -209,17 +209,17 @@ static inline void rmv_page_order(struct page *page)
  */
 
 /*
-*	¼ì²ébuddyÊÇ·ñÃèÊöÁË´óĞ¡Îªorder_sizeµÄ¿ÕÏĞÒ³¿ò¿éµÄµÚÒ»¸öÒ³
-*/
+ * æ£€æŸ¥buddyæ˜¯å¦æè¿°äº†å¤§å°ä¸ºorder_sizeçš„ç©ºé—²é¡µæ¡†å—çš„ç¬¬ä¸€ä¸ªé¡µ
+ * */
 static inline int page_is_buddy(struct page *page, int order)
 {
 	/*
-	*	´ÓÉÏµ½ÏÂ,ËÄ¸öÌõ¼ş:
-	*		peivate×Ö¶Î±ØĞëÊÇÓĞÒâÒåµÄ(PG_privateÖÃÎ»)
-	*		private×Ö¶Î±ØĞë´æ·Å½«Òª±»ÊÍ·ÅµÄ¿éµÄorder
-	*		ÊôÓÚ¶¯Ì¬ÄÚ´æ(PG_reservedÎ»Çå0)
-	*		µÚÒ»¸öÒ³±ØĞëÊÇ¿ÕÏĞ(_count == -1)
-	*/	
+	 * ä»ä¸Šåˆ°ä¸‹,å››ä¸ªæ¡ä»¶:
+	 * 	peivateå­—æ®µå¿…é¡»æ˜¯æœ‰æ„ä¹‰çš„(PG_privateç½®ä½)
+	 * 	privateå­—æ®µå¿…é¡»å­˜æ”¾å°†è¦è¢«é‡Šæ”¾çš„å—çš„order
+	 * 	å±äºåŠ¨æ€å†…å­˜(PG_reservedä½æ¸…0)
+	 * 	ç¬¬ä¸€ä¸ªé¡µå¿…é¡»æ˜¯ç©ºé—²(_count == -1)
+	 * */	
        if (PagePrivate(page)           &&
            (page_order(page) == order) &&
            !PageReserved(page)         &&
@@ -253,21 +253,21 @@ static inline int page_is_buddy(struct page *page, int order)
  */
 
 /*
-*	°´ÕÕ»ï°éÏµÍ³µÄ²ßÂÔÊÍ·ÅÒ³¿ò
-*	²ÎÊı:struct page *page---±»ÊÍ·Å¿éÖĞËù°üº¬µÄµÚÒ»¸öÒ³¿òÃèÊö·ûµÄµØÖ·
-*		     struct zone *zone---¹ÜÀíÇøÃèÊö·ûµÄµØÖ·
-*		     unsigned int order---¿é´óĞ¡µÄ¶ÔÊı
-*/
+ * æŒ‰ç…§ä¼™ä¼´ç³»ç»Ÿçš„ç­–ç•¥é‡Šæ”¾é¡µæ¡†
+ * å‚æ•°:struct page *page---è¢«é‡Šæ”¾å—ä¸­æ‰€åŒ…å«çš„ç¬¬ä¸€ä¸ªé¡µæ¡†æè¿°ç¬¦çš„åœ°å€
+ * 	struct zone *zone---ç®¡ç†åŒºæè¿°ç¬¦çš„åœ°å€
+ * 	unsigned int order---å—å¤§å°çš„å¯¹æ•°
+ * */
 static inline void __free_pages_bulk (struct page *page, struct page *base,
 		struct zone *zone, unsigned int order)
 {
 	/*
-	*	°üº¬¿éÖĞµÚÒ»¸öÒ³¿òµÄÏÂ±ê,
-	*	ÕâÊÇÏà¶ÔÓÚ¹ÜÀíÇøÖĞµÄµÚÒ»¸öÒ³¿ò¶øÑÔµÄ
-	*/
+	 * åŒ…å«å—ä¸­ç¬¬ä¸€ä¸ªé¡µæ¡†çš„ä¸‹æ ‡,
+	 * è¿™æ˜¯ç›¸å¯¹äºç®¡ç†åŒºä¸­çš„ç¬¬ä¸€ä¸ªé¡µæ¡†è€Œè¨€çš„
+	 * */
 	unsigned long page_idx;
 	struct page *coalesced;
-	/*Ôö¼Ó¹ÜÀíÇøÖĞ¿ÕÏĞÒ³¿òµÄ¼ÆÊıÆ÷*/
+	/*å¢åŠ ç®¡ç†åŒºä¸­ç©ºé—²é¡µæ¡†çš„è®¡æ•°å™¨*/
 	int order_size = 1 << order;
 
 	if (unlikely(order))
@@ -280,29 +280,29 @@ static inline void __free_pages_bulk (struct page *page, struct page *base,
 
 	zone->free_pages += order_size;
 	/*
-	*	×î¶àÑ­»·(10-order)´Î,Ã¿´Î¶¼¾¡Á¿°ÑÒ»¸ö¿éºÍËüµÄ»ï°é½øĞĞºÏ²¢
-	*	´Ó×îĞ¡µÄ¿é¿ªÊ¼,ÏòÉÏÒÆ¶¯µ½¶¥²¿
-	*/
+	 * æœ€å¤šå¾ªç¯(10-order)æ¬¡,æ¯æ¬¡éƒ½å°½é‡æŠŠä¸€ä¸ªå—å’Œå®ƒçš„ä¼™ä¼´è¿›è¡Œåˆå¹¶
+	 * ä»æœ€å°çš„å—å¼€å§‹,å‘ä¸Šç§»åŠ¨åˆ°é¡¶éƒ¨
+	 * */
 	while (order < MAX_ORDER-1) {
 		struct free_area *area;
 		struct page *buddy;
 		int buddy_idx;
 
 		/*
-		*	»ñÈ¡»ï°é¿éµÄÏÂ±ê
-		*	Ê¹ÓÃ^(1 << order)×ª»»page_idxµÚorderÎ»
-		*	Õâ¸öÎ»Ô­ÏÈÊÇ0,buddy_idx==page_idx+order_size
-		*	Õâ¸öÎ»Ô­ÏÈÊÇ1,buddy_idx==page_idx-order_size
-		*/
+		 * è·å–ä¼™ä¼´å—çš„ä¸‹æ ‡
+		 * ä½¿ç”¨^(1 << order)è½¬æ¢page_idxç¬¬orderä½
+		 * è¿™ä¸ªä½åŸå…ˆæ˜¯0,buddy_idx==page_idx+order_size
+		 * è¿™ä¸ªä½åŸå…ˆæ˜¯1,buddy_idx==page_idx-order_size
+		 * */
 		buddy_idx = (page_idx ^ (1 << order));
-		/*»ñµÃ»ï°é¿éµÄÒ³ÃèÊö·û*/
+		/*è·å¾—ä¼™ä¼´å—çš„é¡µæè¿°ç¬¦*/
 		buddy = base + buddy_idx;
 		if (bad_range(zone, buddy))
 			break;
 		/*
-		*	¼ì²ébuddyÊÇ·ñÃèÊöÁË´óĞ¡Îªorder_sizeµÄ¿ÕÏĞÒ³¿ò¿éµÄµÚÒ»¸öÒ³
-		*	Ã»ÓĞÂú×ãÌõ¼ş,Ìø³öÑ­»·,ÒòÎª»ñµÃµÄ¿ÕÏĞ¿é²»ÄÜÔÙºÍÆäËû¿ÕÏĞ¿éºÏ²¢
-		*/
+		 * æ£€æŸ¥buddyæ˜¯å¦æè¿°äº†å¤§å°ä¸ºorder_sizeçš„ç©ºé—²é¡µæ¡†å—çš„ç¬¬ä¸€ä¸ªé¡µ
+		 * æ²¡æœ‰æ»¡è¶³æ¡ä»¶,è·³å‡ºå¾ªç¯,å› ä¸ºè·å¾—çš„ç©ºé—²å—ä¸èƒ½å†å’Œå…¶ä»–ç©ºé—²å—åˆå¹¶
+		 * */
 		if (!page_is_buddy(buddy, order))
 			break;
 		/* Move the buddy up one level. */
@@ -313,7 +313,8 @@ static inline void __free_pages_bulk (struct page *page, struct page *base,
 		page_idx &= buddy_idx;
 		order++;
 	}
-	/*½«Ëü²åÈëÊÊµ±µÄÁ´±í²¢ÒÔ¿é´óĞ¡µÄorder¸üĞÂµÚÒ»¸öÒ³¿òµÄprivate*/
+
+	/*å°†å®ƒæ’å…¥é€‚å½“çš„é“¾è¡¨å¹¶ä»¥å—å¤§å°çš„orderæ›´æ–°ç¬¬ä¸€ä¸ªé¡µæ¡†çš„private*/
 	coalesced = base + page_idx;
 	set_page_order(coalesced, order);
 	list_add(&coalesced->lru, &zone->free_area[order].free_list);
@@ -392,7 +393,7 @@ void __free_pages_ok(struct page *page, unsigned int order)
 		free_pages_check(__FUNCTION__, page + i);
 	list_add(&page->lru, &list);
 	kernel_map_pages(page, 1<<order, 0);
-	/*°ÑËüÃÇÊÍ·Åµ½ÊÊµ±ÄÚ´æ¹ÜÀíÇøµÄ»ï°éÏµÍ³ÖĞ*/
+	/*æŠŠå®ƒä»¬é‡Šæ”¾åˆ°é€‚å½“å†…å­˜ç®¡ç†åŒºçš„ä¼™ä¼´ç³»ç»Ÿä¸­*/
 	free_pages_bulk(page_zone(page), 1, &list, order);
 }
 
@@ -422,7 +423,7 @@ expand(struct zone *zone, struct page *page,
 		high--;
 		size >>= 1;
 		BUG_ON(bad_range(zone, &page[size]));
-		/*²åÈë»ï°é,×÷ÎªÁ´±íÖĞµÚÒ»¸öÔªËØ*/
+		/*æ’å…¥ä¼™ä¼´,ä½œä¸ºé“¾è¡¨ä¸­ç¬¬ä¸€ä¸ªå…ƒç´ */
 		list_add(&page[size].lru, &area->free_list);
 		area->nr_free++;
 		set_page_order(&page[size], high);
@@ -452,8 +453,8 @@ void set_page_refs(struct page *page, int order)
  */
 
 /*
-*	³õÊ¼»¯Ò³¿òµÄÒ³ÃèÊö·û
-*/
+ * åˆå§‹åŒ–é¡µæ¡†çš„é¡µæè¿°ç¬¦
+ * */
 static void prep_new_page(struct page *page, int order)
 {
 	if (page->mapping || page_mapped(page) ||
@@ -482,28 +483,28 @@ static void prep_new_page(struct page *page, int order)
  */
 
 /*
-*	ÓÃÀ´ÔÚ¹ÜÀíÇøÖĞÕÒµ½Ò»¸ö¿ÕÏĞ¿é
-*	²ÎÊı:struct zone *zone---¹ÜÀíÇøÃèÊö·ûµØÖ·
-*		     unsigned int order---ÇëÇóµÄ¿ÕÏĞ¿é´óĞ¡µÄÊıÖµ(0---Ò»¸öµ¥Ò³¿é,1---Ò»¸öÁ½Ò³¿é,ÀàÍÆ)
-*	³É¹¦Ôò·µ»ØµÚÒ»¸ö·ÖÅäÒ³¿òµÄÒ²ÃèÊö·û,·ñÔòÎªNULL
-*/ 
+ * ç”¨æ¥åœ¨ç®¡ç†åŒºä¸­æ‰¾åˆ°ä¸€ä¸ªç©ºé—²å—
+ * å‚æ•°:struct zone *zone---ç®¡ç†åŒºæè¿°ç¬¦åœ°å€
+ * 	unsigned int order---è¯·æ±‚çš„ç©ºé—²å—å¤§å°çš„æ•°å€¼(0---ä¸€ä¸ªå•é¡µå—,1---ä¸€ä¸ªä¸¤é¡µå—,ç±»æ¨)
+ * æˆåŠŸ---è¿”å›ç¬¬ä¸€ä¸ªåˆ†é…é¡µæ¡†çš„ä¹Ÿæè¿°ç¬¦,å¦åˆ™ä¸ºNULL
+ * */
 static struct page *__rmqueue(struct zone *zone, unsigned int order)
 {
 	struct free_area * area;
 	unsigned int current_order;
 	struct page *page;
 
-	/*É¨ÃèÃ¿¸ö¿ÉÓÃ¿éÁ´±í,½øĞĞÑ­»·ËÑË÷*/
+	/*æ‰«ææ¯ä¸ªå¯ç”¨å—é“¾è¡¨,è¿›è¡Œå¾ªç¯æœç´¢*/
 	for (current_order = order; current_order < MAX_ORDER; ++current_order) {
 		area = zone->free_area + current_order;
 		if (list_empty(&area->free_list))
 			continue;
 
 		/*
-		*	ÕÒµ½ÁËÒ»¿éºÏÊÊµÄ¿ÕÏĞ¿é,
-		*	É¾³ıËüµÄµÚÒ»¸öÒ³¿òÃèÊö·û
-		*	¼õÉÙ¹ÜÀíÇøÃèÊö·ûÖĞµÄfree_pageµÄÖµ
-		*/
+		 * æ‰¾åˆ°äº†ä¸€å—åˆé€‚çš„ç©ºé—²å—,
+		 * åˆ é™¤å®ƒçš„ç¬¬ä¸€ä¸ªé¡µæ¡†æè¿°ç¬¦
+		 * å‡å°‘ç®¡ç†åŒºæè¿°ç¬¦ä¸­çš„free_pageçš„å€¼
+		 * */
 		page = list_entry(area->free_list.next, struct page, lru);
 		list_del(&page->lru);
 		rmv_page_order(page);
@@ -530,13 +531,13 @@ static int rmqueue_bulk(struct zone *zone, unsigned int order,
 	struct page *page;
 	
 	spin_lock_irqsave(&zone->lock, flags);
-	/*Í¨¹ı·´¸´µ÷ÓÃ__rmqueue()´Ó»ï°éÏµÍ³ÖĞ·ÖÅäbantch¸öµ¥Ò»Ò³¿ò*/
+	/*é€šè¿‡åå¤è°ƒç”¨__rmqueue()ä»ä¼™ä¼´ç³»ç»Ÿä¸­åˆ†é…bantchä¸ªå•ä¸€é¡µæ¡†*/
 	for (i = 0; i < count; ++i) {
 		page = __rmqueue(zone, order);
 		if (page == NULL)
 			break;
 		allocated++;
-		/*²åÈë¸ßËÙ»º´æÁ´±í*/
+		/*æ’å…¥é«˜é€Ÿç¼“å­˜é“¾è¡¨*/
 		list_add_tail(&page->lru, list);
 	}
 	spin_unlock_irqrestore(&zone->lock, flags);
@@ -636,8 +637,8 @@ static void zone_statistics(struct zonelist *zonelist, struct zone *z)
 static void FASTCALL(free_hot_cold_page(struct page *page, int cold));
 
 /*
-*	ÊÍ·Åµ¥¸öÒ³¿òµ½per CPUÒ³¿ò¸ßËÙ»º´æ
-*/
+ * é‡Šæ”¾å•ä¸ªé¡µæ¡†åˆ°per CPUé¡µæ¡†é«˜é€Ÿç¼“å­˜
+ * */
 static void fastcall free_hot_cold_page(struct page *page, int cold)
 {
 	struct zone *zone = page_zone(page);
@@ -687,12 +688,12 @@ static inline void prep_zero_page(struct page *page, int order, int gfp_flags)
  */
 
 /*
-*	ÔÚÖ¸¶¨µÄÄÚ´æ¹ÜÀíÇøÖĞ·ÖÅäÒ³¿ò
-*	Ê¹ÓÃper CPU Ò³¿ò¸ßËÙ»º´æÀ´´¦Àíµ¥Ò»Ò³¿òÇëÇó
-*	²ÎÊı:struct zone *zone---ÄÚ´æ¹ÜÀíÇøÃèÊö·ûµÄµØÖ·
-*		     int order---ÇëÇó·ÖÅäµÄÄÚ´æ´óĞ¡µÄ¶ÔÊı
-*		     int gfp_flags---·ÖÅä±êÖ¾(Ö»¶Ôµ¥Ò»Ò³¿òÇëÇóÓĞÒâÒå)
-*/
+ * åœ¨æŒ‡å®šçš„å†…å­˜ç®¡ç†åŒºä¸­åˆ†é…é¡µæ¡†
+ * ä½¿ç”¨per CPU é¡µæ¡†é«˜é€Ÿç¼“å­˜æ¥å¤„ç†å•ä¸€é¡µæ¡†è¯·æ±‚
+ * å‚æ•°:struct zone *zone---å†…å­˜ç®¡ç†åŒºæè¿°ç¬¦çš„åœ°å€
+ * 	int order---è¯·æ±‚åˆ†é…çš„å†…å­˜å¤§å°çš„å¯¹æ•°
+ * 	int gfp_flags---åˆ†é…æ ‡å¿—(åªå¯¹å•ä¸€é¡µæ¡†è¯·æ±‚æœ‰æ„ä¹‰)
+ * */
 static struct page *
 buffered_rmqueue(struct zone *zone, int order, int gfp_flags)
 {
@@ -705,12 +706,12 @@ buffered_rmqueue(struct zone *zone, int order, int gfp_flags)
 
 		pcp = &zone->pageset[get_cpu()].pcp[cold];
 		local_irq_save(flags);
-		/*¼ì²éÓÉ__GFP_COLD±êÖ¾±êÊ¶ÄÚ´æ¹ÜÀíÇø±¾µØper CPU¸æËß»º´æÊÇ·ñĞèÒª²¹³ä*/
+		/*æ£€æŸ¥ç”±__GFP_COLDæ ‡å¿—æ ‡è¯†å†…å­˜ç®¡ç†åŒºæœ¬åœ°per CPUå‘Šè¯‰ç¼“å­˜æ˜¯å¦éœ€è¦è¡¥å……*/
 		if (pcp->count <= pcp->low)
-			/*¸øcountÔö¼ÓÊµ¼Ê±»·ÖÅäÒ³¿òµÄ¸öÊıÀ´¸üĞÂËü*/
+			/*ç»™countå¢åŠ å®é™…è¢«åˆ†é…é¡µæ¡†çš„ä¸ªæ•°æ¥æ›´æ–°å®ƒ*/
 			pcp->count += rmqueue_bulk(zone, 0,
 						pcp->batch, &pcp->list);
-		/*count > 0,´Ó¸ßËÙ»º´æÁ´±í»ñµÃÒ»¸öÒ³¿ò,*/
+		/*count > 0,ä»é«˜é€Ÿç¼“å­˜é“¾è¡¨è·å¾—ä¸€ä¸ªé¡µæ¡†,*/
 		if (pcp->count) {
 			page = list_entry(pcp->list.next, struct page, lru);
 			list_del(&page->lru);
@@ -720,10 +721,10 @@ buffered_rmqueue(struct zone *zone, int order, int gfp_flags)
 		put_cpu();
 	}
 
-	/*ÄÚ´æÇëÇóÃ»ÓĞÂú×ã,»òÊÇÒòÎªÇëÇó¿çÔ½ÁË¼¸¸öÁ¬ĞøÒ³¿ò,»òÊÇÒòÎª±»Ñ¡ÖĞµÄÒ³¿ò¸ßËÙ»º´æÎª¿Õ*/
+	/*å†…å­˜è¯·æ±‚æ²¡æœ‰æ»¡è¶³,æˆ–æ˜¯å› ä¸ºè¯·æ±‚è·¨è¶Šäº†å‡ ä¸ªè¿ç»­é¡µæ¡†,æˆ–æ˜¯å› ä¸ºè¢«é€‰ä¸­çš„é¡µæ¡†é«˜é€Ÿç¼“å­˜ä¸ºç©º*/
 	if (page == NULL) {
 		spin_lock_irqsave(&zone->lock, flags);
-		/*´Ó»ï°éÏµÍ³ÖĞ·ÖÅäËùÇëÇóµÄÒ³¿ò*/
+		/*ä»ä¼™ä¼´ç³»ç»Ÿä¸­åˆ†é…æ‰€è¯·æ±‚çš„é¡µæ¡†*/
 		page = __rmqueue(zone, order);
 		spin_unlock_irqrestore(&zone->lock, flags);
 	}
@@ -731,10 +732,10 @@ buffered_rmqueue(struct zone *zone, int order, int gfp_flags)
 	if (page != NULL) {
 		BUG_ON(bad_range(zone, page));
 		mod_page_state_zone(zone, pgalloc, 1 << order);
-		/*³õÊ¼»¯Ò³¿òµÄÒ³ÃèÊö·û*/
+		/*åˆå§‹åŒ–é¡µæ¡†çš„é¡µæè¿°ç¬¦*/
 		prep_new_page(page, order);
 
-		/*__GFP_ZERO±»ÖÃÎ»,½«ÄÚ´æÇøÓòÌî³ä0*/
+		/*__GFP_ZEROè¢«ç½®ä½,å°†å†…å­˜åŒºåŸŸå¡«å……0*/
 		if (gfp_flags & __GFP_ZERO)
 			prep_zero_page(page, order, gfp_flags);
 
@@ -750,8 +751,8 @@ buffered_rmqueue(struct zone *zone, int order, int gfp_flags)
  */
 
 /*
-*	¾ö¶¨ÄÚ´æ¹ÜÀíÇøÖĞ¿ÕÏĞÒ³¿ò¸öÊıµÄãĞÖµmin
-*/
+ * å†³å®šå†…å­˜ç®¡ç†åŒºä¸­ç©ºé—²é¡µæ¡†ä¸ªæ•°çš„é˜ˆå€¼min
+ * */
 int zone_watermark_ok(struct zone *z, int order, unsigned long mark,
 		      int classzone_idx, int can_try_harder, int gfp_high)
 {
@@ -759,10 +760,10 @@ int zone_watermark_ok(struct zone *z, int order, unsigned long mark,
 	long min = mark, free_pages = z->free_pages - (1 << order) + 1;
 	int o;
 
-	/*Í¨³£__GFP_WAIT±êÖ¾±»ÖÃÎ»(Èç¹ûÄÜ´Ó¸ß¶ËÄÚ´æÖĞ·ÖÅäÄÚ´æ,gfp_high == 1)*/
+	/*é€šå¸¸__GFP_WAITæ ‡å¿—è¢«ç½®ä½(å¦‚æœèƒ½ä»é«˜ç«¯å†…å­˜ä¸­åˆ†é…å†…å­˜,gfp_high == 1)*/
 	if (gfp_high)
 		min -= min / 2;
-	/*Í¨³£__GFP_WAIT±êÖ¾±»ÖÃÎ»,»òÕßÈç¹ûµ±Ç°½ø³ÌÊÇÒ»¸öÊµÊ±½ø³Ì²¢ÇÒÔÚ½ø³ÌÉÏÏÂÎÄÖĞÒÑ¾­Íê³ÉÁËÄÚ´æ·ÖÅä*/
+	/*é€šå¸¸__GFP_WAITæ ‡å¿—è¢«ç½®ä½,æˆ–è€…å¦‚æœå½“å‰è¿›ç¨‹æ˜¯ä¸€ä¸ªå®æ—¶è¿›ç¨‹å¹¶ä¸”åœ¨è¿›ç¨‹ä¸Šä¸‹æ–‡ä¸­å·²ç»å®Œæˆäº†å†…å­˜åˆ†é…*/
 	if (can_try_harder)
 		min -= min / 4;
 
@@ -780,10 +781,10 @@ int zone_watermark_ok(struct zone *z, int order, unsigned long mark,
 	}
 
 	/*
-	*	Âú×ãÏÂÃæÁ½¸öÌõ¼ş,·µ»Ø1
-	*	1.³ıÁË±»·ÖÅäµÄÒ³¿òÍâ,ÔÚÄÚ´æ¹ÜÀíÖĞÖÁÉÙ»¹ÓĞmin¸ö¿ÕÏĞÒ³¿ò,²»°üÀ¨ÎªÄÚ´æ²»×ã±£ÁôÏÂÀ´µÄÒ³¿ò
-	*	2.³ıÁË±»·ÖÅäµÄÒ³¿òÍâ,ÕâÀïÔÚorderÖÁÉÙÎªkµÄ¿éÖĞÆğÂë»¹ÓĞmin/2^k¸ö¿ÕÏĞ¿ò
-	*/
+	 * æ»¡è¶³ä¸‹é¢ä¸¤ä¸ªæ¡ä»¶,è¿”å›1
+	 * 	1.é™¤äº†è¢«åˆ†é…çš„é¡µæ¡†å¤–,åœ¨å†…å­˜ç®¡ç†ä¸­è‡³å°‘è¿˜æœ‰minä¸ªç©ºé—²é¡µæ¡†,ä¸åŒ…æ‹¬ä¸ºå†…å­˜ä¸è¶³ä¿ç•™ä¸‹æ¥çš„é¡µæ¡†
+	 * 	2.é™¤äº†è¢«åˆ†é…çš„é¡µæ¡†å¤–,è¿™é‡Œåœ¨orderè‡³å°‘ä¸ºkçš„å—ä¸­èµ·ç è¿˜æœ‰min/2^kä¸ªç©ºé—²æ¡†
+	 * */
 	return 1;
 }
 
@@ -792,11 +793,11 @@ int zone_watermark_ok(struct zone *z, int order, unsigned long mark,
  */
 
 /*
-*	¶ÔÒ»×éÁ¬ĞøÒ³¿òµÄÇëÇó,ÊÇ¹ÜÀíÇø·ÖÅäÆ÷µÄºËĞÄ
-*	²ÎÊı:unsigned int gfp_mask---ÄÚ´æ·ÖÅäÖĞÖ¸¶¨µÄ±êÖ¾
-*		     unsigned int order---½«Òª·ÖÅäµÄÒ»×éÁ¬ĞøÒ³¿òÊıÁ¿µÄ¶ÔÊı
-*		     struct zonelist *zonelist---Ö¸ÏòzonelistÊı¾İ½á¹¹µÄÖ¸Õë,°´ÓÅÏÈ´ÎĞòÃèÊöÁËÊÊÓÚÄÚ´æ·ÖÅäµÄÄÚ´æ¹ÜÀíÇø
-*/
+ * å¯¹ä¸€ç»„è¿ç»­é¡µæ¡†çš„è¯·æ±‚,æ˜¯ç®¡ç†åŒºåˆ†é…å™¨çš„æ ¸å¿ƒ
+ * å‚æ•°:unsigned int gfp_mask---å†…å­˜åˆ†é…ä¸­æŒ‡å®šçš„æ ‡å¿—
+ * 	unsigned int order---å°†è¦åˆ†é…çš„ä¸€ç»„è¿ç»­é¡µæ¡†æ•°é‡çš„å¯¹æ•°
+ * 	struct zonelist *zonelist---æŒ‡å‘zonelistæ•°æ®ç»“æ„çš„æŒ‡é’ˆ,æŒ‰ä¼˜å…ˆæ¬¡åºæè¿°äº†é€‚äºå†…å­˜åˆ†é…çš„å†…å­˜ç®¡ç†åŒº
+ * */
 struct page * fastcall
 __alloc_pages(unsigned int gfp_mask, unsigned int order,
 		struct zonelist *zonelist)
@@ -830,10 +831,11 @@ __alloc_pages(unsigned int gfp_mask, unsigned int order,
 
 	classzone_idx = zone_idx(zones[0]);
 
-	/*É¨Ãè°üº¬ÔÚzonelistÊı¾İ½á¹¹ÖĞµÄÃ¿¸öÄÚ´æ¹ÜÀíÇø*/
+	/*æ‰«æåŒ…å«åœ¨zonelistæ•°æ®ç»“æ„ä¸­çš„æ¯ä¸ªå†…å­˜ç®¡ç†åŒº*/
  restart:
 	/* Go through the zonelist once, looking for a zone with enough free */
-	/*µÚÒ»´ÎÉ¨Ãè,minÉèÖÃÎªz->pages_low,zÖ¸ÏòÕıÔÚ±»·ÖÎöµÄ¹ÜÀíÇøÃèÊö·û*/
+
+	/*ç¬¬ä¸€æ¬¡æ‰«æ,minè®¾ç½®ä¸ºz->pages_low,zæŒ‡å‘æ­£åœ¨è¢«åˆ†æçš„ç®¡ç†åŒºæè¿°ç¬¦*/
 	for (i = 0; (z = zones[i]) != NULL; i++) {
 
 		if (!zone_watermark_ok(z, order, z->pages_low,
@@ -845,7 +847,7 @@ __alloc_pages(unsigned int gfp_mask, unsigned int order,
 			goto got_pg;
 	}
 
-	/*Ã»ÓĞÊ£ÏÂ¶àÉÙ¿ÕÏĞÄÚ´æ,»½ĞÑkswapdÄÚºËÏß³ÌÒì¿ªÊ¼»ØÊÕÒ³¿ò*/
+	/*æ²¡æœ‰å‰©ä¸‹å¤šå°‘ç©ºé—²å†…å­˜,å”¤é†’kswapdå†…æ ¸çº¿ç¨‹å¼‚å¼€å§‹å›æ”¶é¡µæ¡†*/
 	for (i = 0; (z = zones[i]) != NULL; i++)
 		wakeup_kswapd(z, order);
 
@@ -854,7 +856,7 @@ __alloc_pages(unsigned int gfp_mask, unsigned int order,
 	 * coming from realtime tasks to go deeper into reserves
 	 */
 
-	/*µÚ¶ş´ÎÉ¨ÃèÊ¹ÓÃÁË½ÏµÍµÄãĞÖµ*/
+	/*ç¬¬äºŒæ¬¡æ‰«æä½¿ç”¨äº†è¾ƒä½çš„é˜ˆå€¼*/
 	for (i = 0; (z = zones[i]) != NULL; i++) {
 		if (!zone_watermark_ok(z, order, z->pages_min,
 				       classzone_idx, can_try_harder,
@@ -869,7 +871,7 @@ __alloc_pages(unsigned int gfp_mask, unsigned int order,
 	/* This allocation should allow future memory freeing. */
 	if (((p->flags & PF_MEMALLOC) || unlikely(test_thread_flag(TIF_MEMDIE))) && !in_interrupt()) {
 		/* go through the zonelist yet again, ignoring mins */
-		/*µÚÈı´ÎÉ¨Ãè,ÊÔÍ¼·ÖÅäÒ³¿ò,²¢ºöÂÔÄÚ´æ²»×ãµÄãĞÖµ---²»µ÷ÓÃzone_watermark_ok()*/
+		/*ç¬¬ä¸‰æ¬¡æ‰«æ,è¯•å›¾åˆ†é…é¡µæ¡†,å¹¶å¿½ç•¥å†…å­˜ä¸è¶³çš„é˜ˆå€¼---ä¸è°ƒç”¨zone_watermark_ok()*/
 		for (i = 0; (z = zones[i]) != NULL; i++) {
 			page = buffered_rmqueue(z, order, gfp_mask);
 			if (page)
@@ -883,24 +885,24 @@ __alloc_pages(unsigned int gfp_mask, unsigned int order,
 		goto nopage;
 
 rebalance:
-	/*µ±Ç°½ø³ÌÄÜÔÚÕâ×èÈû,¼ì²éÊÇ·ñÓĞÆäËûµÄ½ø³ÌĞèÒªCPU*/
+	/*å½“å‰è¿›ç¨‹èƒ½åœ¨è¿™é˜»å¡,æ£€æŸ¥æ˜¯å¦æœ‰å…¶ä»–çš„è¿›ç¨‹éœ€è¦CPU*/
 	cond_resched();
 
 	/* We now go into synchronous reclaim */
-	p->flags |= PF_MEMALLOC;	/*ÒÑ¾­×¼±¸ºÃÖ´ĞĞÄÚ´æ»ØÊÕ*/
+	p->flags |= PF_MEMALLOC;	/*å·²ç»å‡†å¤‡å¥½æ‰§è¡Œå†…å­˜å›æ”¶*/
 	reclaim_state.reclaimed_slab = 0;
 	p->reclaim_state = &reclaim_state;
 
-	/*Ñ°ÕÒÒ»Ğ©Ò³¿òÀ´»ØÊÕ*/
+	/*å¯»æ‰¾ä¸€äº›é¡µæ¡†æ¥å›æ”¶*/
 	did_some_progress = try_to_free_pages(zones, gfp_mask, order);
 
-	/*ºóÒ»¸öº¯Êı¿ÉÄÜ×èÈûµ±Ç°½ø³Ì,Ò»µ©º¯Êı·µ»Ø,ÖØÉèPF_MEMALLOC,²¢ÔÙ´Îµ÷ÓÃcond_resched()*/
+	/*åä¸€ä¸ªå‡½æ•°å¯èƒ½é˜»å¡å½“å‰è¿›ç¨‹,ä¸€æ—¦å‡½æ•°è¿”å›,é‡è®¾PF_MEMALLOC,å¹¶å†æ¬¡è°ƒç”¨cond_resched()*/
 	p->reclaim_state = NULL;
 	p->flags &= ~PF_MEMALLOC;
 
 	cond_resched();
 
-	/*ÒÑ¾­ÊÍ·ÅÁËÒ»Ğ©Ò³¿ò*/
+	/*å·²ç»é‡Šæ”¾äº†ä¸€äº›é¡µæ¡†*/
 	if (likely(did_some_progress)) {
 		/*
 		 * Go through the zonelist yet one more time, keep
@@ -908,7 +910,7 @@ rebalance:
 		 * a parallel oom killing, we must fail if we're still
 		 * under heavy pressure.
 		 */
-		/*Ö´ĞĞÓëµÚ¶ş´ÎÏàÍ¬µÄÉ¨Ãè*/
+		/*æ‰§è¡Œä¸ç¬¬äºŒæ¬¡ç›¸åŒçš„æ‰«æ*/
 		for (i = 0; (z = zones[i]) != NULL; i++) {
 			if (!zone_watermark_ok(z, order, z->pages_min,
 					       classzone_idx, can_try_harder,
@@ -920,9 +922,9 @@ rebalance:
 				goto got_pg;
 		}
 	/*
-	*	Ã»ÓĞÊÍ·ÅÈÎºÎÒ³¿ò,ååÒâÎ¶×ÅÒ³¿òÉÙµ½ÁË¼«Î£ÏÕµÄµØ²½,²¢ÇÒ²»¿ÉÄÜ»ØÊÕÒ³¿ò
-	*	(gfp_mask & __GFP_FS) ---ÔÊĞíÄÚºË¿ØÖÆÂ·¾¶ÒÀÀµÓÚÎÄ¼şÏµÍ³µÄ²Ù×÷À´É±ËÀÒ»¸ö½ø³Ì
-	*/
+	 * æ²¡æœ‰é‡Šæ”¾ä»»ä½•é¡µæ¡†,é‚‹æ„å‘³ç€é¡µæ¡†å°‘åˆ°äº†æå±é™©çš„åœ°æ­¥,å¹¶ä¸”ä¸å¯èƒ½å›æ”¶é¡µæ¡†
+	 * (gfp_mask & __GFP_FS) ---å…è®¸å†…æ ¸æ§åˆ¶è·¯å¾„ä¾èµ–äºæ–‡ä»¶ç³»ç»Ÿçš„æ“ä½œæ¥æ€æ­»ä¸€ä¸ªè¿›ç¨‹
+	 * */
 	} else if ((gfp_mask & __GFP_FS) && !(gfp_mask & __GFP_NORETRY)) {
 		/*
 		 * Go through the zonelist yet one more time, keep
@@ -930,7 +932,7 @@ rebalance:
 		 * a parallel oom killing, we must fail if we're still
 		 * under heavy pressure.
 		 */
-		 /* z->pages_highÎªãĞÖµ,ÔÙÉ¨ÃèÒ»´ÎÄÚ´æ¹ÜÀíÇø*/
+		 /* z->pages_highä¸ºé˜ˆå€¼,å†æ‰«æä¸€æ¬¡å†…å­˜ç®¡ç†åŒº*/
 		for (i = 0; (z = zones[i]) != NULL; i++) {
 			if (!zone_watermark_ok(z, order, z->pages_high,
 					       classzone_idx, 0, 0))
@@ -941,7 +943,7 @@ rebalance:
 				goto got_pg;
 		}
 
-		/*Í¨¹ıÒ»Ğ©½ø³Ì¿ªÊ¼ÊÍ·ÅÒ»Ğ©ÄÚ´æ*/
+		/*é€šè¿‡ä¸€äº›è¿›ç¨‹å¼€å§‹é‡Šæ”¾ä¸€äº›å†…å­˜  mm/oom_kill.c*/
 		out_of_memory(gfp_mask);
 		goto restart;
 	}
@@ -961,7 +963,7 @@ rebalance:
 			do_retry = 1;
 	}
 	if (do_retry) {
-		/*Ê¹½ø³ÌĞİÃßÒ»ÏÂ*/
+		/*ä½¿è¿›ç¨‹ä¼‘çœ ä¸€ä¸‹*/
 		blk_congestion_wait(WRITE, HZ/50);
 		goto rebalance;
 	}
@@ -986,8 +988,8 @@ EXPORT_SYMBOL(__alloc_pages);
  */
 
 /*
-*	ÀàËÆÓÚalloc_pages()£¬µ«·µ»ØµÚÒ»¸öËù·ÖÅäÒ³µÄÏßĞÔµØÖ·
-*/
+ * ç±»ä¼¼äºalloc_pages()ï¼Œä½†è¿”å›ç¬¬ä¸€ä¸ªæ‰€åˆ†é…é¡µçš„çº¿æ€§åœ°å€
+ * */
 fastcall unsigned long __get_free_pages(unsigned int gfp_mask, unsigned int order)
 {
 	struct page * page;
@@ -1000,9 +1002,9 @@ fastcall unsigned long __get_free_pages(unsigned int gfp_mask, unsigned int orde
 EXPORT_SYMBOL(__get_free_pages);
 
 /*
-*	»ñµÃÌîÂú0µÄÒ³¿ò
-*	·µ»Ø»ñÈ¡Ò³¿òµÄÏßĞÔµØÖ·
-*/
+ * è·å¾—å¡«æ»¡0çš„é¡µæ¡†
+ * è¿”å›è·å–é¡µæ¡†çš„çº¿æ€§åœ°å€
+ * */
 fastcall unsigned long get_zeroed_page(unsigned int gfp_mask)
 {
 	struct page * page;
@@ -1030,20 +1032,20 @@ void __pagevec_free(struct pagevec *pvec)
 }
 
 /*
-*	ÊÍ·Å Ò³¿ò
-*/
+ * é‡Šæ”¾é¡µæ¡†
+ * */
 fastcall void __free_pages(struct page *page, unsigned int order)
 {
 	/*
-	*	!PageReserved(page)---¼ì²éµÚÒ»¸öÒ³¿òÊÇ·ñÊôÓÚ¶¯Ì¬ÄÚ´æ
-	*	put_page_testzero(page)---¼õÉÙpage->countµÄÖµ,¹Û²ìÆäÊÇ·ñ>= 0
-	*/
+	 * !PageReserved(page)---æ£€æŸ¥ç¬¬ä¸€ä¸ªé¡µæ¡†æ˜¯å¦å±äºåŠ¨æ€å†…å­˜
+	 * put_page_testzero(page)---å‡å°‘page->countçš„å€¼,è§‚å¯Ÿå…¶æ˜¯å¦>= 0
+	 * */
 	if (!PageReserved(page) && put_page_testzero(page)) {
 		if (order == 0)
-			/*ÊÍ·ÅÒ³¿ò¸øÊÊµ±ÄÚ´æ¹ÜÀíÇøµÄÄÚ¸óCPUÈÈ¸ßËÙ»º´æ*/
+			/*é‡Šæ”¾é¡µæ¡†ç»™é€‚å½“å†…å­˜ç®¡ç†åŒºçš„å†…é˜CPUçƒ­é«˜é€Ÿç¼“å­˜*/
 			free_hot_page(page);
 		else
-			/*½«Ò³¿ò¼ÓÈëµ½±¾µØÁ´±íÖĞ,*/
+			/*å°†é¡µæ¡†åŠ å…¥åˆ°æœ¬åœ°é“¾è¡¨ä¸­,*/
 			__free_pages_ok(page, order);
 	}
 }
@@ -1051,8 +1053,8 @@ fastcall void __free_pages(struct page *page, unsigned int order)
 EXPORT_SYMBOL(__free_pages);
 
 /*
-*	ÀàËÆÓÚ__free_pages,µ«Ëü½ÓÊÕµÄ²ÎÊıÎªÒªÊÍ·ÅµÄµÚÒ»¸öÒ³¿òµÄÏßĞÔµØÖ·
-*/
+ * ç±»ä¼¼äº__free_pages,ä½†å®ƒæ¥æ”¶çš„å‚æ•°ä¸ºè¦é‡Šæ”¾çš„ç¬¬ä¸€ä¸ªé¡µæ¡†çš„çº¿æ€§åœ°å€
+ * */
 fastcall void free_pages(unsigned long addr, unsigned int order)
 {
 	if (addr != 0) {
