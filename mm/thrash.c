@@ -16,6 +16,7 @@
 static DEFINE_SPINLOCK(swap_token_lock);
 static unsigned long swap_token_timeout;
 unsigned long swap_token_check;
+/*交换标记的实现形式*/
 struct mm_struct * swap_token_mm = &init_mm;
 
 #define SWAP_TOKEN_CHECK_INTERVAL (HZ * 2)
@@ -49,6 +50,17 @@ static int should_release_swap_token(struct mm_struct *mm)
  * SMP lock contention and to check that the process that held
  * the token before is no longer thrashing.
  */
+
+/*
+ * 决定是否将交换标记赋给当前进程
+ * 调用该函数的情形:
+ * 	1.filemap_nopage()发现请求页不再页高速缓存中
+ * 	2.do_swap_page()从交换区读入一个新页
+ * 赋予交换标记的条件:
+ * 	1.上次调用grab_swap_token()后，至少已过了2s()
+ * 	2.在上一次调用grab_swap_token()后，当前拥有交换标记的进程没再提出主缺页，或该进程拥有交换标记的时间超出swap_token_default_timeout个节拍
+ *	3.当前进程最近没有获得过交换标记
+ * */
 void grab_swap_token(void)
 {
 	struct mm_struct *mm;

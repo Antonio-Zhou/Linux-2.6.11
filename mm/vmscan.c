@@ -1093,6 +1093,10 @@ out:
  * the page allocator fallback scheme to ensure that aging of pages is balanced
  * across the zones.
  */
+
+/*
+ * 对kswapd的内存节点进行内存回收
+ * */
 static int balance_pgdat(pg_data_t *pgdat, int nr_pages, int order)
 {
 	int to_free = nr_pages;
@@ -1104,6 +1108,7 @@ static int balance_pgdat(pg_data_t *pgdat, int nr_pages, int order)
 	struct scan_control sc;
 
 loop_again:
+	/*建立scan_contro;描述符*/
 	total_scanned = 0;
 	total_reclaimed = 0;
 	sc.gfp_mask = GFP_KERNEL;
@@ -1112,12 +1117,14 @@ loop_again:
 
 	inc_page_state(pageoutrun);
 
+	/*把内存节点的每个管理区描述符中的temp_priority设为12*/
 	for (i = 0; i < pgdat->nr_zones; i++) {
 		struct zone *zone = pgdat->node_zones + i;
 
 		zone->temp_priority = DEF_PRIORITY;
 	}
 
+	/*从12到0的迭代*/
 	for (priority = DEF_PRIORITY; priority >= 0; priority--) {
 		int end_zone = 0;	/* Inclusive.  0 = ZONE_DMA */
 		unsigned long lru_pages = 0;
@@ -1129,6 +1136,8 @@ loop_again:
 			 * Scan in the highmem->dma direction for the highest
 			 * zone which needs scanning
 			 */
+
+			/*扫描内存管理区，寻找空闲页框数不足的最高管理区(从ZONE_DMA到ZONE_HIGHMEM)*/
 			for (i = pgdat->nr_zones - 1; i >= 0; i--) {
 				struct zone *zone = pgdat->node_zones + i;
 
@@ -1139,6 +1148,7 @@ loop_again:
 						priority != DEF_PRIORITY)
 					continue;
 
+				/*检测 mm/page_alloc.c*/
 				if (!zone_watermark_ok(zone, order,
 						zone->pages_high, 0, 0, 0)) {
 					end_zone = i;
@@ -1149,7 +1159,9 @@ loop_again:
 		} else {
 			end_zone = pgdat->nr_zones - 1;
 		}
+
 scan:
+		/*再进行一次扫描。范围是从ZONE_DMA到上面步骤找出来的管理区*/
 		for (i = 0; i <= end_zone; i++) {
 			struct zone *zone = pgdat->node_zones + i;
 
@@ -1180,13 +1192,16 @@ scan:
 					all_zones_ok = 0;
 			}
 			zone->temp_priority = priority;
+			/*更新prev_priority*/
 			if (zone->prev_priority > priority)
 				zone->prev_priority = priority;
 			sc.nr_scanned = 0;
 			sc.nr_reclaimed = 0;
 			sc.priority = priority;
+			/*回收管理区的页*/
 			shrink_zone(zone, &sc);
 			reclaim_state->reclaimed_slab = 0;
+			/*从可压缩磁盘高速缓存回收页*/
 			shrink_slab(sc.nr_scanned, GFP_KERNEL, lru_pages);
 			sc.nr_reclaimed += reclaim_state->reclaimed_slab;
 			total_reclaimed += sc.nr_reclaimed;
@@ -1222,20 +1237,25 @@ scan:
 		 * matches the direct reclaim path behaviour in terms of impact
 		 * on zone->*_priority.
 		 */
+		/*已至少回收32页*/
 		if (total_reclaimed >= SWAP_CLUSTER_MAX)
 			break;
 	}
+
 out:
+	/*用各自temp_priority字段的值更新每个管理区描述符的prev_priority*/
 	for (i = 0; i < pgdat->nr_zones; i++) {
 		struct zone *zone = pgdat->node_zones + i;
 
 		zone->prev_priority = zone->temp_priority;
 	}
+	/*仍有"内存紧缺"管理区存在，且如果进程的need_resched置位*/
 	if (!all_zones_ok) {
 		cond_resched();
 		goto loop_again;
 	}
 
+	/*返回回收的页数*/
 	return total_reclaimed;
 }
 
@@ -1252,6 +1272,14 @@ out:
  * If there are applications that are active memory-allocators
  * (most normal use), this basically shouldn't matter.
  */
+
+/*
+ * kswapd内核线程的执行函数
+ * 内核线程被初始化的内容:
+ * 	1.把线程绑定到访问内存节点的CPU。
+ * 	2.把reclaim_state描述符地址存入进程描述符的current->reclaim_state
+ * 	3.把current->flags的PF_MEMALLOC和PF_KSWAP置位---进程将回收内存，运行时允许使用全部可用空闲内存
+ * */
 static int kswapd(void *p)
 {
 	unsigned long order;
@@ -1289,6 +1317,7 @@ static int kswapd(void *p)
 		if (current->flags & PF_FREEZE)
 			refrigerator(PF_FREEZE);
 
+		/*把进程设成TASK_INTERRUPTIBLE，并让它在节点的kswapd_wait等待队列中睡眠 kernel/wait.c*/
 		prepare_to_wait(&pgdat->kswapd_wait, &wait, TASK_INTERRUPTIBLE);
 		new_order = pgdat->kswapd_max_order;
 		pgdat->kswapd_max_order = 0;
@@ -1299,11 +1328,14 @@ static int kswapd(void *p)
 			 */
 			order = new_order;
 		} else {
+			/*让CPU处理一些其他可运行进程*/
 			schedule();
 			order = pgdat->kswapd_max_order;
 		}
+		/*从节点的kswapd_wait等待队列删除内核线程 kernel/wait.c*/
 		finish_wait(&pgdat->kswapd_wait, &wait);
 
+		/*对kswapd的内存节点进行内存回收 mm/vmscan.c*/
 		balance_pgdat(pgdat, 0, order);
 	}
 	return 0;

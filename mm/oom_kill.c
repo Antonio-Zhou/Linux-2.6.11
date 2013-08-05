@@ -135,6 +135,17 @@ unsigned long badness(struct task_struct *p, unsigned long uptime)
  *
  * (not docbooked, we don't want this one cluttering up the manual)
  */
+
+/*
+ * 在现有进程中选择一个"牺牲品"
+ * 选择条件:
+ * 	1.它必须拥有大量页框，从而可以释放处大量内存
+ * 	2.删除它只损失少量工作成果
+ * 	3.它应具有较低的静态优先级，用户通常给不太重要的进程赋予较低的优先级
+ * 	4.它不应是有root特权的进程，特权进程的工作通常比较重要
+ * 	5.它不应直接访问硬件块设备，因为硬件不能处在一个无法预知的状态
+ * 	6.它不能是swapper(进程0)，init(进程1)和任何其他内核线程
+ * */
 static struct task_struct * select_bad_process(void)
 {
 	unsigned long maxpoints = 0;
@@ -227,6 +238,11 @@ static struct mm_struct *oom_kill_task(task_t *p)
 	return mm;
 }
 
+/*
+ * 删除进程
+ * 向进程发出死亡信号(通常是SIGKILL)。该信号发给该进程的一个子进程，若做不到，就发给该进程本身
+ * 同时也删除与被选进程共享内存描述符的多有克隆进程
+ * */
 static struct mm_struct *oom_kill_process(struct task_struct *p)
 {
  	struct mm_struct *mm;

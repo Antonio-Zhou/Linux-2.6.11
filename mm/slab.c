@@ -301,17 +301,18 @@ struct kmem_list3 {
 	
 struct kmem_cache_s {
 /* 1) per-cpu data, touched during every alloc/free */
-	struct array_cache	*array[NR_CPUS];	/*per CPUÖ¸ÕëÊı×éÖ¸Ïò°üº¬¿ÕÏĞ¶ÔÏóµÄ±¾µØ¸ßËÙ»º´æ*/
-	unsigned int		batchcount;		/**/
-	unsigned int		limit;			/**/
+	/*per CPUæŒ‡é’ˆæ•°ç»„æŒ‡å‘åŒ…å«ç©ºé—²å¯¹è±¡çš„æœ¬åœ°é«˜é€Ÿç¼“å­˜*/
+	struct array_cache	*array[NR_CPUS];
+	unsigned int		batchcount;
+	unsigned int		limit;
 /* 2) touched by every alloc & free from the backend */
 	struct kmem_list3	lists;		
 	/* NUMA: kmem_3list_t	*nodelists[MAX_NUMNODES] */
-	unsigned int		objsize;			/**/
-	unsigned int	 	flags;	/* constant flags */			/**/
-	unsigned int		num;	/* # of objs per slab */			/**/
-	unsigned int		free_limit; /* upper limit of objects in the lists */		/**/
-	spinlock_t		spinlock;		/**/
+	unsigned int		objsize;
+	unsigned int	 	flags;	/* constant flags */
+	unsigned int		num;	/* # of objs per slab */
+	unsigned int		free_limit; /* upper limit of objects in the lists */
+	spinlock_t		spinlock;
 
 /* 3) cache_grow/shrink */
 	/* order of pgs per slab (2^n) */
@@ -499,16 +500,16 @@ static int slab_break_gfp_order = BREAK_GFP_ORDER_LO;
  * With kfree(), these are used to find the cache which an obj belongs to.
  */
 #define	SET_PAGE_CACHE(pg,x)  ((pg)->lru.next = (struct list_head *)(x))
-/*¶ÁÈ¡ÄÚ´æÇøËùÔÚµÄµÚÒ»¸öÒ³¿òÃèÊö·ûµÄlru.next,¿ÉÈ·¶¨³öºÏÊÊµÄ¸ßËÙ»º´æÃèÊö·û*/
+/*è¯»å–å†…å­˜åŒºæ‰€åœ¨çš„ç¬¬ä¸€ä¸ªé¡µæ¡†æè¿°ç¬¦çš„lru.next,å¯ç¡®å®šå‡ºåˆé€‚çš„é«˜é€Ÿç¼“å­˜æè¿°ç¬¦*/
 #define	GET_PAGE_CACHE(pg)    ((kmem_cache_t *)(pg)->lru.next)
 #define	SET_PAGE_SLAB(pg,x)   ((pg)->lru.prev = (struct list_head *)(x))
 #define	GET_PAGE_SLAB(pg)     ((struct slab *)(pg)->lru.prev)
 
 /* These are the default caches for kmalloc. Custom caches can have other sizes. */
 /*
-*	·Ö±ğÖ¸Ïò26¸ö¸ßËÙ»º´æÃèÊö·û,ÓëÆäÏà¹ØµÄÄÚ´æÇø´óĞ¡Îª2^5--2^17×Ö½Ú
-*	Ã¿ÖÖ´óĞ¡¶¼ÓĞÁ½¸ö¸ßËÙ»º´æ:Ò»¸öÊÊÓÃÓÚISA DMA·ÖÅä,ÁíÒ»¸öÓÃÓÚ³£¹æ·ÖÅä
-*/
+ * åˆ†åˆ«æŒ‡å‘26ä¸ªé«˜é€Ÿç¼“å­˜æè¿°ç¬¦,ä¸å…¶ç›¸å…³çš„å†…å­˜åŒºå¤§å°ä¸º2^5--2^17å­—èŠ‚
+ * æ¯ç§å¤§å°éƒ½æœ‰ä¸¤ä¸ªé«˜é€Ÿç¼“å­˜:ä¸€ä¸ªé€‚ç”¨äºISA DMAåˆ†é…,å¦ä¸€ä¸ªç”¨äºå¸¸è§„åˆ†é…
+ * */
 struct cache_sizes malloc_sizes[] = {
 #define CACHE(x) { .cs_size = (x) },
 #include <linux/kmalloc_sizes.h>
@@ -537,7 +538,8 @@ static struct arraycache_init initarray_generic =
 	{ { 0, BOOT_CPUCACHE_ENTRIES, 1, 0} };
 
 /* internal cache of cache description objs */
-/*°üº¬µÚÒ»¸ö¸ßËÙ»º´æµÄÃèÊö·û*/
+
+/*åŒ…å«ç¬¬ä¸€ä¸ªé«˜é€Ÿç¼“å­˜çš„æè¿°ç¬¦*/
 static kmem_cache_t cache_cache = {
 	.lists		= LIST3_INIT(cache_cache.lists),
 	.batchcount	= 1,
@@ -574,6 +576,7 @@ static enum {
 	FULL
 } g_cpucache_up;
 
+/*cache_reap()çš„åœ°å€å­˜æ”¾åœ¨reap_workçš„funcå­—æ®µ*/
 static DEFINE_PER_CPU(struct work_struct, reap_work);
 
 static void free_block(kmem_cache_t* cachep, void** objpp, int len);
@@ -894,13 +897,11 @@ __initcall(cpucache_init);
  */
  
  /*
-*	µ±slab·ÖÅäÆ÷´´½¨ĞÂµÄslabÊ±,ËüÒÀ¿¿·ÖÇøÒ³¿ò·ÖÅäÆ÷À´»ñµÃÒ»×éÁ¬ĞøµÄ¿ÕÏĞÒ³¿ò
-*	²ÎÊı:kmem_cache_t *cachep---Ö¸ÏòĞèÒª¶îÍâÒ³¿òµÄ¸ßËÙ»º´æµÄ¸ßËÙ»º´æÃèÊö·û
-*								ÇëÇóÒ³¿òµÄ¸öÊıÓÉ´æ·ÅÔÚcachep->gfporder×Ö¶ÎÖĞµÄorder¾ö¶¨
-*		     int flags---ËµÃ÷ÈçºÎÇëÇóÒ³¿ò,
-*					Õâ×é±êÖ¾Óë´æ·ÅÔÚ¸ßËÙ»º´æÃèÊö·ûµÄgfpflags×Ö¶ÎÖĞµÄ×¨ÓÃ¸ßËÙ»º´æ·ÖÅä±êÖ¾Ïà½áºÏ
-*		     int nodeid
-*/
+  * å½“slabåˆ†é…å™¨åˆ›å»ºæ–°çš„slabæ—¶,å®ƒä¾é åˆ†åŒºé¡µæ¡†åˆ†é…å™¨æ¥è·å¾—ä¸€ç»„è¿ç»­çš„ç©ºé—²é¡µæ¡†
+  * å‚æ•°:kmem_cache_t *cachep---æŒ‡å‘éœ€è¦é¢å¤–é¡µæ¡†çš„é«˜é€Ÿç¼“å­˜çš„é«˜é€Ÿç¼“å­˜æè¿°ç¬¦ï¼Œè¯·æ±‚é¡µæ¡†çš„ä¸ªæ•°ç”±å­˜æ”¾åœ¨cachep->gfporderå­—æ®µä¸­çš„orderå†³å®š
+  * 	 int flags---è¯´æ˜å¦‚ä½•è¯·æ±‚é¡µæ¡†,è¿™ç»„æ ‡å¿—ä¸å­˜æ”¾åœ¨é«˜é€Ÿç¼“å­˜æè¿°ç¬¦çš„gfpflagså­—æ®µä¸­çš„ä¸“ç”¨é«˜é€Ÿç¼“å­˜åˆ†é…æ ‡å¿—ç›¸ç»“åˆ
+  * 	 int nodeid
+  * */
 static void *kmem_getpages(kmem_cache_t *cachep, int flags, int nodeid)
 {
 	struct page *page;
@@ -933,9 +934,9 @@ static void *kmem_getpages(kmem_cache_t *cachep, int flags, int nodeid)
  */
 
 /*
-*	ÊÍ·Å·ÖÅä¸øslabµÄÒ³¿ò
-*	´ÓÏßĞÔµØÖ·addr¿ªÊ¼ÊÍ·ÅÒ³¿ò
-*/
+ * é‡Šæ”¾åˆ†é…ç»™slabçš„é¡µæ¡†
+ * ä»çº¿æ€§åœ°å€addrå¼€å§‹é‡Šæ”¾é¡µæ¡†
+ * */
 static void kmem_freepages(kmem_cache_t *cachep, void *addr)
 {
 	unsigned long i = (1<<cachep->gfporder);
@@ -948,7 +949,7 @@ static void kmem_freepages(kmem_cache_t *cachep, void *addr)
 		page++;
 	}
 	sub_page_state(nr_slab, nr_freed);
-	/*µ±Ç°½ø³ÌÕıÔÚÖ´ĞĞÄÚ´æ»ØÊÕ*/
+	/*å½“å‰è¿›ç¨‹æ­£åœ¨æ‰§è¡Œå†…å­˜å›æ”¶*/
 	if (current->reclaim_state)
 		current->reclaim_state->reclaimed_slab += nr_freed;
 	free_pages((unsigned long)addr, cachep->gfporder);
@@ -1119,10 +1120,10 @@ static void check_poison_obj(kmem_cache_t *cachep, void *objp)
  */
 
 /*
-*	³·Ïúslab,²¢ÊÍ·ÅÏàÓ¦µÄÒ³¿òµ½·ÖÇøÒ³¿ò·ÖÅäÆ÷
-*	Ìõ¼ş:1.slab¸ßËÙ»º´æÖĞÓĞÌ«¶àµÄ¿ÕÏĞ¶ÔÏó
-*		     2.±»ÖÜÆÚĞÔµ÷ÓÃµÄ¶¨Ê±Æ÷º¯ÊıÈ·¶¨ÊÇ·ñÓĞÍêÈ«Î´Ê¹ÓÃµÄslabÄÜ±»ÊÍ·Å
-*/
+ * æ’¤é”€slab,å¹¶é‡Šæ”¾ç›¸åº”çš„é¡µæ¡†åˆ°åˆ†åŒºé¡µæ¡†åˆ†é…å™¨
+ * æ¡ä»¶:1.slabé«˜é€Ÿç¼“å­˜ä¸­æœ‰å¤ªå¤šçš„ç©ºé—²å¯¹è±¡
+ * 	2.è¢«å‘¨æœŸæ€§è°ƒç”¨çš„å®šæ—¶å™¨å‡½æ•°ç¡®å®šæ˜¯å¦æœ‰å®Œå…¨æœªä½¿ç”¨çš„slabèƒ½è¢«é‡Šæ”¾
+ * */
 static void slab_destroy (kmem_cache_t *cachep, struct slab *slabp)
 {
 	void *addr = slabp->s_mem - slabp->colouroff;
@@ -1154,11 +1155,11 @@ static void slab_destroy (kmem_cache_t *cachep, struct slab *slabp)
 			(cachep->dtor)(objp+obj_dbghead(cachep), cachep, 0);
 	}
 #else
-	/*¼ì²é¸ßËÙ»º´æÊÇ·ñÎªËüµÄ¶ÔÏóÌá¹©ÁËÎö¹¹·½·¨*/
+	/*æ£€æŸ¥é«˜é€Ÿç¼“å­˜æ˜¯å¦ä¸ºå®ƒçš„å¯¹è±¡æä¾›äº†ææ„æ–¹æ³•*/
 	if (cachep->dtor) {
 		int i;
 		for (i = 0; i < cachep->num; i++) {
-			/*objp¼ÇÂ¼µ±Ç°ÒÑ¼ì²éµÄ¶ÔÏó*/
+			/*objpè®°å½•å½“å‰å·²æ£€æŸ¥çš„å¯¹è±¡*/
 			void* objp = slabp->s_mem+cachep->objsize*i;
 			(cachep->dtor)(objp, cachep, 0);
 		}
@@ -1171,10 +1172,10 @@ static void slab_destroy (kmem_cache_t *cachep, struct slab *slabp)
 		slab_rcu = (struct slab_rcu *) slabp;
 		slab_rcu->cachep = cachep;
 		slab_rcu->addr = addr;
-		/*×¢²áÒ»¸ö»Øµ÷º¯ÊıÀ´ÑÓÆÚÊÍ·Åslab*/
+		/*æ³¨å†Œä¸€ä¸ªå›è°ƒå‡½æ•°æ¥å»¶æœŸé‡Šæ”¾slab*/
 		call_rcu(&slab_rcu->head, kmem_rcu_free);
 	} else {
-		/*°ÑslabÊ¹ÓÃµÄËùÓĞÁ¬ĞøÒ³¿ò·µ»Ø¸ø»ï°éÏµÍ³*/
+		/*æŠŠslabä½¿ç”¨çš„æ‰€æœ‰è¿ç»­é¡µæ¡†è¿”å›ç»™ä¼™ä¼´ç³»ç»Ÿ*/
 		kmem_freepages(cachep, addr);
 		if (OFF_SLAB(cachep))
 			kmem_cache_free(cachep->slabp_cache, slabp);
@@ -1216,8 +1217,8 @@ static void slab_destroy (kmem_cache_t *cachep, struct slab *slabp)
  */
 
 /*
-*	×¨ÓÃ¸ßËÙ»º´æµÄ´´½¨
-*/
+ * ä¸“ç”¨é«˜é€Ÿç¼“å­˜çš„åˆ›å»º
+ * */
 kmem_cache_t *
 kmem_cache_create (const char *name, size_t size, size_t align,
 	unsigned long flags, void (*ctor)(void*, kmem_cache_t *, unsigned long),
@@ -1255,7 +1256,7 @@ kmem_cache_create (const char *name, size_t size, size_t align,
 	 * above the next power of two: caches with object sizes just above a
 	 * power of two have a significant amount of internal fragmentation.
 	 */
-	 /*¸ù¾İBYTES_PER_WORDÖ¸¶¨µÄ´óĞ¡À´¶ÔÆë¶ÔÏó*/
+	 /*æ ¹æ®BYTES_PER_WORDæŒ‡å®šçš„å¤§å°æ¥å¯¹é½å¯¹è±¡*/
 	if ((size < 4096 || fls(size-1) == fls(size-1+3*BYTES_PER_WORD)))
 		flags |= SLAB_RED_ZONE|SLAB_STORE_USER;
 	if (!(flags & SLAB_DESTROY_BY_RCU))
@@ -1664,8 +1665,8 @@ EXPORT_SYMBOL(kmem_cache_shrink);
  */
 
 /*
-*	³·ÏúÒ»¸ö¸ßËÙ»º´æ²¢½«Ëü´Ócache_chainÁ´±íÉÏÉ¾³ı
-*/
+ * æ’¤é”€ä¸€ä¸ªé«˜é€Ÿç¼“å­˜å¹¶å°†å®ƒä»cache_chainé“¾è¡¨ä¸Šåˆ é™¤
+ * */
 int kmem_cache_destroy (kmem_cache_t * cachep)
 {
 	int i;
@@ -1717,8 +1718,8 @@ EXPORT_SYMBOL(kmem_cache_destroy);
 /* Get the memory for a slab management obj. */
 
 /*
-*	»ñµÃÒ»¸öĞÂµÄslabÃèÊö·û
-*/
+ * è·å¾—ä¸€ä¸ªæ–°çš„slabæè¿°ç¬¦
+ * */
 static struct slab* alloc_slabmgmt (kmem_cache_t *cachep,
 			void *objp, int colour_off, int local_flags)
 {
@@ -1823,9 +1824,9 @@ static void set_slab_attr(kmem_cache_t *cachep, struct slab *slabp, void *objp)
  */
 
 /*
-*	¸ø¸ßËÙ»º´æ·ÖÅäÒ»¸öĞÂµÄslab
-*	Ìõ¼ş:1.ÒÑ·¢³öÒ»¸ö·ÖÅäĞÂ¶ÔÏóµÄÇëÇó
-*		     2.¸ßËÙ»º´æ²»°üÀ¨ÈÎºÎ¿ÕÏĞ¶ÔÏó
+ * ç»™é«˜é€Ÿç¼“å­˜åˆ†é…ä¸€ä¸ªæ–°çš„slab
+ * æ¡ä»¶:1.å·²å‘å‡ºä¸€ä¸ªåˆ†é…æ–°å¯¹è±¡çš„è¯·æ±‚
+ * 	2.é«˜é€Ÿç¼“å­˜ä¸åŒ…æ‹¬ä»»ä½•ç©ºé—²å¯¹è±¡
 */
 static int cache_grow (kmem_cache_t * cachep, int flags, int nodeid)
 {
@@ -1887,7 +1888,7 @@ static int cache_grow (kmem_cache_t * cachep, int flags, int nodeid)
 
 	set_slab_attr(cachep, slabp, objp);
 
-	/*¹¹Ôì·½·¨Ó¦ÓÃµ½ĞÂslab°üº¬µÄËùÓĞ¶ÔÏóÉÏ*/
+	/*æ„é€ æ–¹æ³•åº”ç”¨åˆ°æ–°slabåŒ…å«çš„æ‰€æœ‰å¯¹è±¡ä¸Š*/
 	cache_init_objs(cachep, slabp, ctor_flags);
 
 	if (local_flags & __GFP_WAIT)
@@ -1897,9 +1898,9 @@ static int cache_grow (kmem_cache_t * cachep, int flags, int nodeid)
 
 	/* Make slab active. */
 	/*
-	*	½«ĞÂµÃµ½µÄslabÃèÊö·ûÌí¼Óµ½¸ßËÙ»º´æÃèÊö·û*cachepµÄÈ«¿ÕslabÁ´±íµÄÄ©¶Ë
-	*	²¢¸üĞÂ¸ßËÙ»º´æÖĞµÄ¿ÕÏĞ¶ÔÏó¼ÆÊıÆ÷
-	*/
+	 * å°†æ–°å¾—åˆ°çš„slabæè¿°ç¬¦æ·»åŠ åˆ°é«˜é€Ÿç¼“å­˜æè¿°ç¬¦*cachepçš„å…¨ç©ºslabé“¾è¡¨çš„æœ«ç«¯
+	 * å¹¶æ›´æ–°é«˜é€Ÿç¼“å­˜ä¸­çš„ç©ºé—²å¯¹è±¡è®¡æ•°å™¨
+	 * */
 	list_add_tail(&slabp->list, &(list3_data(cachep)->slabs_free));
 	STATS_INC_GROWN(cachep);
 	list3_data(cachep)->free_objects += cachep->num;
@@ -2036,8 +2037,8 @@ bad:
 #endif
 
 /*
-*	ÖØĞÂÌî³ä±¾µØ¸ßËÙ»º´æ²¢»ñµÃÒ»¸ö¿ÕÏĞ¶ÔÏó
-*/
+ * é‡æ–°å¡«å……æœ¬åœ°é«˜é€Ÿç¼“å­˜å¹¶è·å¾—ä¸€ä¸ªç©ºé—²å¯¹è±¡
+ * */
 static void* cache_alloc_refill(kmem_cache_t* cachep, int flags)
 {
 	int batchcount;
@@ -2045,7 +2046,7 @@ static void* cache_alloc_refill(kmem_cache_t* cachep, int flags)
 	struct array_cache *ac;
 
 	check_irq_off();
-	/*½«±¾µØ¸ßËÙ»º´æÃèÊö·ûµÄµØÖ·´æ·ÅÔÚac¾Ö²¿±äÁ¿ÖĞ*/
+	/*å°†æœ¬åœ°é«˜é€Ÿç¼“å­˜æè¿°ç¬¦çš„åœ°å€å­˜æ”¾åœ¨acå±€éƒ¨å˜é‡ä¸­*/
 	ac = ac_data(cachep);
 retry:
 	batchcount = ac->batchcount;
@@ -2060,10 +2061,10 @@ retry:
 
 	BUG_ON(ac->avail > 0);
 	spin_lock(&cachep->spinlock);
-	/*slab¸ßËÙ»º´æ°üº¬¹²Ïí±¾µØ¸ßËÙ»º´æ*/
+	/*slabé«˜é€Ÿç¼“å­˜åŒ…å«å…±äº«æœ¬åœ°é«˜é€Ÿç¼“å­˜*/
 	if (l3->shared) {
 		struct array_cache *shared_array = l3->shared;
-		/*¸Ã¹²Ïí±¾µØ¸ßËÙ»º´æ°üº¬Ò»Ğ©¿ÕÏĞ¶ÔÏó*/
+		/*è¯¥å…±äº«æœ¬åœ°é«˜é€Ÿç¼“å­˜åŒ…å«ä¸€äº›ç©ºé—²å¯¹è±¡*/
 		if (shared_array->avail) {
 			if (batchcount > shared_array->avail)
 				batchcount = shared_array->avail;
@@ -2075,12 +2076,12 @@ retry:
 			goto alloc_done;
 		}
 	}
-	/*ÊÔÍ¼Ìî³ä±¾µØ¸ßËÙ»º´æ,Ìî³äÖµÎª¸ßËÙ»º´æµÄslabÖĞ°üº¬µÄ¶à´ïac->batchount¸ö¿ÕÏĞ¶ÔÏóµÄÖ¸Õë*/
+	/*è¯•å›¾å¡«å……æœ¬åœ°é«˜é€Ÿç¼“å­˜,å¡«å……å€¼ä¸ºé«˜é€Ÿç¼“å­˜çš„slabä¸­åŒ…å«çš„å¤šè¾¾ac->batchountä¸ªç©ºé—²å¯¹è±¡çš„æŒ‡é’ˆ*/
 	while (batchcount > 0) {
 		struct list_head *entry;
 		struct slab *slabp;
 		/* Get slab alloc is to come from. */
-		/*²é¿´¸ßËÙ»º´æÃèÊö·ûµÄslabs->partialºÍslabs_freeÁ´±í*/
+		/*æŸ¥çœ‹é«˜é€Ÿç¼“å­˜æè¿°ç¬¦çš„slabs->partialå’Œslabs_freeé“¾è¡¨*/
 		entry = l3->slabs_partial.next;
 		if (entry == &l3->slabs_partial) {
 			l3->free_touched = 1;
@@ -2089,7 +2090,7 @@ retry:
 				goto must_grow;
 		}
 		
-		/*»ñµÃslabpµÄµØÖ·*/
+		/*è·å¾—slabpçš„åœ°å€*/
 		slabp = list_entry(entry, struct slab, list);
 		check_slabp(cachep, slabp);
 		check_spinlock_acquired(cachep);
@@ -2101,9 +2102,9 @@ retry:
 
 			/* get obj pointer */
 			/*
-			*	¶ÔÓÚslabÖĞµÄÃ¿¸ö¿ÕÏĞ¶ÔÏó,º¯ÊıÔö¼ÓslabÃèÊö·ûµÄinuse.
-			*	½«¶ÔÏóµÄµØÖ·²åÈë±¾µØ¸ßËÙ»º´æ,²¢¸üĞÂfree×Ö¶ÎÊ¹µÃËü´æ·ÅÁËslabÖĞÏÂÒ»¸ö¿ÕÏĞ¶ÔÏóµÄÏÂ±ê
-			*/
+			 * å¯¹äºslabä¸­çš„æ¯ä¸ªç©ºé—²å¯¹è±¡,å‡½æ•°å¢åŠ slabæè¿°ç¬¦çš„inuse.
+			 * å°†å¯¹è±¡çš„åœ°å€æ’å…¥æœ¬åœ°é«˜é€Ÿç¼“å­˜,å¹¶æ›´æ–°freeå­—æ®µä½¿å¾—å®ƒå­˜æ”¾äº†slabä¸­ä¸‹ä¸€ä¸ªç©ºé—²å¯¹è±¡çš„ä¸‹æ ‡
+			 * */
 			ac_entry(ac)[ac->avail++] = slabp->s_mem + slabp->free*cachep->objsize;
 
 			slabp->inuse++;
@@ -2125,17 +2126,17 @@ retry:
 
 must_grow:
 	/*
-	*	±»¼Óµ½±¾µØ¸ßËÙ»º´æÉÏµÄÖ¸Õë¸öÊı±»´æ·ÅÔÚac->avail:
-	*	º¯Êıµİ¼õÍ¬ÑùÊıÁ¿µÄkmem_list3½á¹¹µÄfree_objects×Ö¶ÎÀ´ËµÃ÷ÕâĞ©¶ÔÏó²»ÔÙ¿ÕÏĞ
-	*/
+	 * è¢«åŠ åˆ°æœ¬åœ°é«˜é€Ÿç¼“å­˜ä¸Šçš„æŒ‡é’ˆä¸ªæ•°è¢«å­˜æ”¾åœ¨ac->avail:
+	 * å‡½æ•°é€’å‡åŒæ ·æ•°é‡çš„kmem_list3ç»“æ„çš„free_objectså­—æ®µæ¥è¯´æ˜è¿™äº›å¯¹è±¡ä¸å†ç©ºé—²
+	 * */
 	l3->free_objects -= ac->avail;
 alloc_done:
 	spin_unlock(&cachep->spinlock);
 
-	/*ac->avail >0 ËµÃ÷Ò»Ğ©¸ßËÙ»º´æÔÙÌî³äµÄÇé¿ö·¢ÉúÁË*/
+	/*ac->avail >0 è¯´æ˜ä¸€äº›é«˜é€Ÿç¼“å­˜å†å¡«å……çš„æƒ…å†µå‘ç”Ÿäº†*/
 	if (unlikely(!ac->avail)) {
 		int x;
-		/*»ñµÃÒ»¸öĞÂslab,´Ó¶ø»ñµÃĞÂµÄ¿ÕÏĞ¶ÔÏó*/
+		/*è·å¾—ä¸€ä¸ªæ–°slab,ä»è€Œè·å¾—æ–°çš„ç©ºé—²å¯¹è±¡*/
 		x = cache_grow(cachep, flags, -1);
 		
 		// cache_grow can reenable interrupts, then ac could change.
@@ -2147,7 +2148,7 @@ alloc_done:
 			goto retry;
 	}
 	ac->touched = 1;
-	/*·µ»Ø×îºó²åÈëµ½±¾µØ¸ßËÙ»º´æµÄ¿ÕÏĞ¶ÔÏóÖ¸Õë*/
+	/*è¿”å›æœ€åæ’å…¥åˆ°æœ¬åœ°é«˜é€Ÿç¼“å­˜çš„ç©ºé—²å¯¹è±¡æŒ‡é’ˆ*/
 	return ac_entry(ac)[--ac->avail];
 }
 
@@ -2217,17 +2218,17 @@ static inline void * __cache_alloc (kmem_cache_t *cachep, int flags)
 	local_irq_save(save_flags);
 	ac = ac_data(cachep);
 	/*
-	*	ÊÔÍ¼´Ó±¾µØ¸ßËÙ»º´æ»ñµÃÒ»¸ö¿ÕÏĞ¶ÔÏó
-	*	avail°üº¬Ö¸Ïò×îºó±»ÊÍ·ÅµÄ¶ÔÏóµÄÏîÔÚ±¾µØ¸ßËÙ»º´æÖĞµÄÏÂ±ê
-	*/
+	 * è¯•å›¾ä»æœ¬åœ°é«˜é€Ÿç¼“å­˜è·å¾—ä¸€ä¸ªç©ºé—²å¯¹è±¡
+	 * availåŒ…å«æŒ‡å‘æœ€åè¢«é‡Šæ”¾çš„å¯¹è±¡çš„é¡¹åœ¨æœ¬åœ°é«˜é€Ÿç¼“å­˜ä¸­çš„ä¸‹æ ‡
+	 * */
 	if (likely(ac->avail)) {
 		STATS_INC_ALLOCHIT(cachep);
 		ac->touched = 1;
-		/*»ñµÃÄÇ¸ö¿ÕÏĞ¶ÔÏóµÄµØÖ·,²¢µİ¼õac->avail*/
+		/*è·å¾—é‚£ä¸ªç©ºé—²å¯¹è±¡çš„åœ°å€,å¹¶é€’å‡ac->avail*/
 		objp = ac_entry(ac)[--ac->avail];
 	} else {
 		STATS_INC_ALLOCMISS(cachep);
-		/*Ã»ÓĞ¿ÕÏĞ¶ÔÏóÊ±,ÖØĞÂÌî³ä±¾µØ¸ßËÙ»º´æ²¢»ñµÃÒ»¸ö¿ÕÏĞ¶ÔÏó*/
+		/*æ²¡æœ‰ç©ºé—²å¯¹è±¡æ—¶,é‡æ–°å¡«å……æœ¬åœ°é«˜é€Ÿç¼“å­˜å¹¶è·å¾—ä¸€ä¸ªç©ºé—²å¯¹è±¡*/
 		objp = cache_alloc_refill(cachep, flags);
 	}
 	local_irq_restore(save_flags);
@@ -2247,7 +2248,7 @@ static void free_block(kmem_cache_t *cachep, void **objpp, int nr_objects)
 	check_spinlock_acquired(cachep);
 
 	/* NUMA: move add into loop */
-	/*Ôö¼Ó¸ßËÙ»º´æÃèÊö·ûµÄlists.free_objects*/
+	/*å¢åŠ é«˜é€Ÿç¼“å­˜æè¿°ç¬¦çš„lists.free_objects*/
 	cachep->lists.free_objects += nr_objects;
 
 	for (i = 0; i < nr_objects; i++) {
@@ -2256,13 +2257,13 @@ static void free_block(kmem_cache_t *cachep, void **objpp, int nr_objects)
 		unsigned int objnr;
 
 		/*
-		*	È·¶¨°üº¬¶ÔÏóµÄslabÃèÊö·ûµÄµØÖ·
-		*	slabÒ³ÃèÊö·ûµÄlru.prev×Ö¶ÎÖ¸ÏòÏàÓ¦µÄslabÃèÊö·û
-		*/
+		 * ç¡®å®šåŒ…å«å¯¹è±¡çš„slabæè¿°ç¬¦çš„åœ°å€
+		 * slabé¡µæè¿°ç¬¦çš„lru.prevå­—æ®µæŒ‡å‘ç›¸åº”çš„slabæè¿°ç¬¦
+		 * */
 		slabp = GET_PAGE_SLAB(virt_to_page(objp));
-		/*´ÓËüµÄ¸ßËÙ»º´æÁ´±í(cachep->lists.slabs_partial»òÊÇcachep->lists.slabs_fullÉÏÉ¾³ıslabÃèÊö·û)*/
+		/*ä»å®ƒçš„é«˜é€Ÿç¼“å­˜é“¾è¡¨(cachep->lists.slabs_partialæˆ–æ˜¯cachep->lists.slabs_fullä¸Šåˆ é™¤slabæè¿°ç¬¦)*/
 		list_del(&slabp->list);
-		/*¼ÆËãslabÄÚ¶ÔÏóµÄÏÂ±ê*/
+		/*è®¡ç®—slabå†…å¯¹è±¡çš„ä¸‹æ ‡*/
 		objnr = (objp - slabp->s_mem) / cachep->objsize;
 		check_slabp(cachep, slabp);
 #if DEBUG
@@ -2273,9 +2274,9 @@ static void free_block(kmem_cache_t *cachep, void **objpp, int nr_objects)
 		}
 #endif
 		/*
-		*	½«slabp->freeµÄµ±Ç°Öµ´æ·ÅÔÚ¶ÔÏóÃèÊö·ûÖĞ,²¢½«¶ÔÏóµÄÏÂ±ê·ÅÈëslabp->free
-		*	×îºó±»ÊÍ·ÅµÄ¶ÔÏó½«ÔÙ´Î³ÉÎªÊ×´Î±»·ÖÅäµÄ¶ÔÏó
-		*/
+		 * å°†slabp->freeçš„å½“å‰å€¼å­˜æ”¾åœ¨å¯¹è±¡æè¿°ç¬¦ä¸­,å¹¶å°†å¯¹è±¡çš„ä¸‹æ ‡æ”¾å…¥slabp->free
+		 * æœ€åè¢«é‡Šæ”¾çš„å¯¹è±¡å°†å†æ¬¡æˆä¸ºé¦–æ¬¡è¢«åˆ†é…çš„å¯¹è±¡
+		 * */
 		slab_bufctl(slabp)[objnr] = slabp->free;
 		slabp->free = objnr;
 		STATS_DEC_ACTIVE(cachep);
@@ -2283,15 +2284,15 @@ static void free_block(kmem_cache_t *cachep, void **objpp, int nr_objects)
 		check_slabp(cachep, slabp);
 
 		/* fixup slab chains */
-		/*slabÖĞËùÓĞ¶ÔÏó¿ÕÏĞ*/
+		/*slabä¸­æ‰€æœ‰å¯¹è±¡ç©ºé—²*/
 		if (slabp->inuse == 0) {
-			/*Õû¸ö¸ßËÙ»º´æÖĞ¿ÕÏĞ¶ÔÏóµÄ¸öÊı(lists.free_objects)>ÏŞÖÆµÄ¸öÊı(free_limit)*/
+			/*æ•´ä¸ªé«˜é€Ÿç¼“å­˜ä¸­ç©ºé—²å¯¹è±¡çš„ä¸ªæ•°(lists.free_objects)>é™åˆ¶çš„ä¸ªæ•°(free_limit)*/
 			if (cachep->lists.free_objects > cachep->free_limit) {
 				cachep->lists.free_objects -= cachep->num;
-				/*½«slabÒ³¿òÊÍ·Åµ½·ÖÇøÒ³¿ò·ÖÅäÆ÷*/
+				/*å°†slabé¡µæ¡†é‡Šæ”¾åˆ°åˆ†åŒºé¡µæ¡†åˆ†é…å™¨*/
 				slab_destroy(cachep, slabp);
 			} else {
-				/*½«slabÃèÊö·û²åÈëµ½slabs_freeÁ´±íÖĞ*/
+				/*å°†slabæè¿°ç¬¦æ’å…¥åˆ°slabs_freeé“¾è¡¨ä¸­*/
 				list_add(&slabp->list,
 				&list3_data_ptr(cachep, objp)->slabs_free);
 			}
@@ -2301,7 +2302,7 @@ static void free_block(kmem_cache_t *cachep, void **objpp, int nr_objects)
 			 * other objects to be freed, too.
 			 */
 			 
-			 /*inuse > 0,slab±»²¿·ÖÌî³ä,½«slabÃèÊö·û²åÈëµ½slabs_partialÖĞ*/
+			 /*inuse > 0,slabè¢«éƒ¨åˆ†å¡«å……,å°†slabæè¿°ç¬¦æ’å…¥åˆ°slabs_partialä¸­*/
 			list_add_tail(&slabp->list,
 				&list3_data_ptr(cachep, objp)->slabs_partial);
 		}
@@ -2309,8 +2310,8 @@ static void free_block(kmem_cache_t *cachep, void **objpp, int nr_objects)
 }
 
 /*
-*	Çå¿Õ±¾µØ¸ßËÙ»º´æ
-*/
+ * æ¸…ç©ºæœ¬åœ°é«˜é€Ÿç¼“å­˜
+ * */
 static void cache_flusharray (kmem_cache_t* cachep, struct array_cache *ac)
 {
 	int batchcount;
@@ -2321,15 +2322,15 @@ static void cache_flusharray (kmem_cache_t* cachep, struct array_cache *ac)
 #endif
 	check_irq_off();
 	spin_lock(&cachep->spinlock);
-	/*slab¸ßËÙ»º´æ°üº¬Ò»¸ö¹²Ïí±¾µØ¸ßËÙ»º´æ*/
+	/*slabé«˜é€Ÿç¼“å­˜åŒ…å«ä¸€ä¸ªå…±äº«æœ¬åœ°é«˜é€Ÿç¼“å­˜*/
 	if (cachep->lists.shared) {
 		struct array_cache *shared_array = cachep->lists.shared;
 		int max = shared_array->limit-shared_array->avail;
-		/*¸Ã¹²Ïí±¾µØ¸ßËÙ»º´æ»¹Ã»ÓĞÂú*/
+		/*è¯¥å…±äº«æœ¬åœ°é«˜é€Ÿç¼“å­˜è¿˜æ²¡æœ‰æ»¡*/
 		if (max) {
 			if (batchcount > max)
 				batchcount = max;
-			/*´ÓCPUµÄ±¾µØ¸ßËÙ»º´æÉÏÒÆac->batchcount¸öÖ¸ÕëÀ´Ìî³ä¹²Ïí±¾µØ¸ßËÙ»º´æ*/
+			/*ä»CPUçš„æœ¬åœ°é«˜é€Ÿç¼“å­˜ä¸Šç§»ac->batchcountä¸ªæŒ‡é’ˆæ¥å¡«å……å…±äº«æœ¬åœ°é«˜é€Ÿç¼“å­˜*/
 			memcpy(&ac_entry(shared_array)[shared_array->avail],
 					&ac_entry(ac)[0],
 					sizeof(void*)*batchcount);
@@ -2338,7 +2339,7 @@ static void cache_flusharray (kmem_cache_t* cachep, struct array_cache *ac)
 		}
 	}
 
-	/*½«µ±Ç°°üº¬ÔÚ±¾µØ¸ßËÙ»º´æÖĞµÄac->batchcount¸ö¶ÔÏó¹é»¹¸øslab·ÖÅäÆ÷*/
+	/*å°†å½“å‰åŒ…å«åœ¨æœ¬åœ°é«˜é€Ÿç¼“å­˜ä¸­çš„ac->batchcountä¸ªå¯¹è±¡å½’è¿˜ç»™slabåˆ†é…å™¨*/
 	free_block(cachep, &ac_entry(ac)[0], batchcount);
 free_done:
 #if STATS
@@ -2360,12 +2361,12 @@ free_done:
 	}
 #endif
 	spin_unlock(&cachep->spinlock);
-	/*Í¨¹ı¼õÈ¥±»ÒÆµ½¹²Ïí±¾µØ»º´æ»òÊÍ·Åµ½slab·ÖÅäÆ÷µÄ¶ÔÏóµÄ¸öÊıÀ´¸üĞÂ±¾µØ¸ßËÙ»º´æÃèÊö·ûµÄavail*/
+	/*é€šè¿‡å‡å»è¢«ç§»åˆ°å…±äº«æœ¬åœ°ç¼“å­˜æˆ–é‡Šæ”¾åˆ°slabåˆ†é…å™¨çš„å¯¹è±¡çš„ä¸ªæ•°æ¥æ›´æ–°æœ¬åœ°é«˜é€Ÿç¼“å­˜æè¿°ç¬¦çš„avail*/
 	ac->avail -= batchcount;
 	/*
-	*	ÒÆ¶¯±¾µØ¸ßËÙ»º´æÊı×éÆğÊ¼´¦µÄÄÇ¸ö±¾µØ¸ßËÙ»º´æÉÏµÄËùÓĞÖ¸Õë
-	*	±ØĞëµÄ.ÒòÎªÒÑ¾­°ÑµÚÒ»¸ö¶ÔÏóÖ¸Õë´Ó±¾µØ¸ßËÙ»º´æÖĞÉ¾³ı,Òò´ËÊ£ÏÂµÄÖ¸Õë±ØĞëÉÏÒÆ
-	*/
+	 * ç§»åŠ¨æœ¬åœ°é«˜é€Ÿç¼“å­˜æ•°ç»„èµ·å§‹å¤„çš„é‚£ä¸ªæœ¬åœ°é«˜é€Ÿç¼“å­˜ä¸Šçš„æ‰€æœ‰æŒ‡é’ˆ
+	 * å¿…é¡»çš„.å› ä¸ºå·²ç»æŠŠç¬¬ä¸€ä¸ªå¯¹è±¡æŒ‡é’ˆä»æœ¬åœ°é«˜é€Ÿç¼“å­˜ä¸­åˆ é™¤,å› æ­¤å‰©ä¸‹çš„æŒ‡é’ˆå¿…é¡»ä¸Šç§»
+	 * */
 	memmove(&ac_entry(ac)[0], &ac_entry(ac)[batchcount],
 			sizeof(void*)*ac->avail);
 }
@@ -2384,15 +2385,15 @@ static inline void __cache_free (kmem_cache_t *cachep, void* objp)
 	check_irq_off();
 	objp = cache_free_debugcheck(cachep, objp, __builtin_return_address(0));
 
-	/*¼ì²é±¾µØ¸ßËÙ»º´æÊÇ·ñÓĞ¿Õ¼ä¸øÖ¸ÏòÒ»¸ö¿ÕÏĞ¶ÔÏóµÄ¶îÍâÖ¸Õë.*/
+	/*æ£€æŸ¥æœ¬åœ°é«˜é€Ÿç¼“å­˜æ˜¯å¦æœ‰ç©ºé—´ç»™æŒ‡å‘ä¸€ä¸ªç©ºé—²å¯¹è±¡çš„é¢å¤–æŒ‡é’ˆ.*/
 	if (likely(ac->avail < ac->limit)) {
 		STATS_INC_FREEHIT(cachep);
-		/*Èç¹ûÓĞ,¸ÃÖ¸Õë±»¼Óµ½±¾µØ¸ßËÙ»º´æ*/
+		/*å¦‚æœæœ‰,è¯¥æŒ‡é’ˆè¢«åŠ åˆ°æœ¬åœ°é«˜é€Ÿç¼“å­˜*/
 		ac_entry(ac)[ac->avail++] = objp;
 		return;
 	} else {
 		STATS_INC_FREEMISS(cachep);
-		/*Çå¿Õ±¾µØ¸ßËÙ»º´æ*/
+		/*æ¸…ç©ºæœ¬åœ°é«˜é€Ÿç¼“å­˜*/
 		cache_flusharray(cachep, ac);
 		ac_entry(ac)[ac->avail++] = objp;
 	}
@@ -2408,8 +2409,8 @@ static inline void __cache_free (kmem_cache_t *cachep, void* objp)
  */
 
 /*
-*	¿ÉÒÔ»ñµÃĞÂ¶ÔÏó
-*/
+ * å¯ä»¥è·å¾—æ–°å¯¹è±¡
+ * */
 void * kmem_cache_alloc (kmem_cache_t *cachep, int flags)
 {
 	return __cache_alloc(cachep, flags);
@@ -2569,7 +2570,7 @@ EXPORT_SYMBOL(kmem_cache_alloc_node);
  */
 void * __kmalloc (size_t size, int flags)
 {
-	/*Ê¹ÓÃmalloc_size±íÎªËùÇëÇóµÄ´óĞ¡·ÖÅä×î½üµÄ2µÄÃİ´Î·½´óĞ¡µÄÄÚ´æ*/
+	/*ä½¿ç”¨malloc_sizeè¡¨ä¸ºæ‰€è¯·æ±‚çš„å¤§å°åˆ†é…æœ€è¿‘çš„2çš„å¹‚æ¬¡æ–¹å¤§å°çš„å†…å­˜*/
 	struct cache_sizes *csizep = malloc_sizes;
 
 	for (; csizep->cs_size; csizep++) {
@@ -2645,10 +2646,10 @@ EXPORT_SYMBOL(__alloc_percpu);
  */
 
 /*
-*	ÊÍ·ÅÒ»¸öÔø¾­ÓÉslab·ÖÅäÆ÷·ÖÅä¸øÄ³¸öÄÚºËº¯ÊıµÄ¶ÔÏó
-*	²ÎÊı:kmem_cache_t *cachep---¸ßËÙ»º´æÃèÊö·ûµÄµØÖ·
-*		     void *objp---½«±»ÊÍ·Å¶ÔÏóµÄµØÖ·
-*/
+ * é‡Šæ”¾ä¸€ä¸ªæ›¾ç»ç”±slabåˆ†é…å™¨åˆ†é…ç»™æŸä¸ªå†…æ ¸å‡½æ•°çš„å¯¹è±¡
+ * å‚æ•°:kmem_cache_t *cachep---é«˜é€Ÿç¼“å­˜æè¿°ç¬¦çš„åœ°å€
+ * 	void *objp---å°†è¢«é‡Šæ”¾å¯¹è±¡çš„åœ°å€
+ * */
 void kmem_cache_free (kmem_cache_t *cachep, void *objp)
 {
 	unsigned long flags;
@@ -2690,8 +2691,8 @@ EXPORT_SYMBOL(kcalloc);
  */
 
 /*
-*	kmallocËù»ñµÃµÄ¶ÔÏóÍ¨¹ı¸Ãº¯ÊıÊÍ·Å
-*/
+ * kmallocæ‰€è·å¾—çš„å¯¹è±¡é€šè¿‡è¯¥å‡½æ•°é‡Šæ”¾
+ * */
 void kfree (const void *objp)
 {
 	kmem_cache_t *c;
@@ -2702,7 +2703,7 @@ void kfree (const void *objp)
 	local_irq_save(flags);
 	kfree_debugcheck(objp);
 	c = GET_PAGE_CACHE(virt_to_page(objp));
-	/*ÊÍ·ÅÏàÓ¦ÄÚ´æÇø*/
+	/*é‡Šæ”¾ç›¸åº”å†…å­˜åŒº*/
 	__cache_free(c, (void*)objp);
 	local_irq_restore(flags);
 }
@@ -2897,16 +2898,24 @@ static void drain_array_locked(kmem_cache_t *cachep,
  * If we cannot acquire the cache chain semaphore then just give up - we'll
  * try again on the next iteration.
  */
+
+/*
+ * PFRAå›æ”¶slabåˆ†é…å™¨é«˜é€Ÿç¼“å­˜çš„é¡µ
+ * å‘¨æœŸæ€§(å·®ä¸å¤šä¸¤ç§’ä¸€æ¬¡)åœ°åœ¨é¢„å®šäº‹ä»¶å·¥ä½œé˜Ÿåˆ—ä¸­è¢«è°ƒåº¦ã€‚
+ * */
 static void cache_reap(void *unused)
 {
 	struct list_head *walk;
 
+	/*ä¿æŠ¤slabé«˜é€Ÿç¼“å­˜æè¿°ç¬¦é“¾è¡¨ï¼Œ*/
 	if (down_trylock(&cache_chain_sem)) {
 		/* Give up. Setup the next iteration. */
+		/*ä¿¡å·é‡å·²è·å¾—ï¼Œè°ƒç”¨schedule_delayed_work()å»è°ƒåº¦è¯¥å‡½æ•°çš„ä¸‹ä¸€æ¬¡æ‰§è¡Œ*/
 		schedule_delayed_work(&__get_cpu_var(reap_work), REAPTIMEOUT_CPUC + smp_processor_id());
 		return;
 	}
 
+	/*æ‰«æå­˜æ”¾åœ¨cache_chainé“¾è¡¨ä¸­çš„kmem_cache_tæè¿°ç¬¦ï¼Œ*/
 	list_for_each(walk, &cache_chain) {
 		kmem_cache_t *searchp;
 		struct list_head* p;
@@ -2915,6 +2924,7 @@ static void cache_reap(void *unused)
 
 		searchp = list_entry(walk, kmem_cache_t, next);
 
+		/*SLAB_NO_REAPç½®ä½ï¼Œé¡µæ¡†å›æ”¶è¢«ç¦æ­¢ï¼Œå¤„ç†é“¾è¡¨ä¸­çš„ä¸‹ä¸€ä¸ªé«˜é€Ÿç¼“å­˜*/
 		if (searchp->flags & SLAB_NO_REAP)
 			goto next;
 
@@ -2922,21 +2932,36 @@ static void cache_reap(void *unused)
 
 		spin_lock_irq(&searchp->spinlock);
 
+		/*æ¸…ç©ºå±€éƒ¨slabé«˜é€Ÿç¼“å­˜,åˆ™ä¼šæœ‰æ–°çš„slabè¢«é‡Šæ”¾  mm/slab.c*/
 		drain_array_locked(searchp, ac_data(searchp), 0);
 
+		/*
+		 * æ¯ä¸ªé«˜é€Ÿç¼“å­˜éƒ½æœ‰"æ”¶å‰²æ—¶é—´(reap time)", è¯¥å€¼å­˜æ”¾åœ¨next_reapä¸­ï¼Œ
+		 * è‹¥jiffies < next_reapï¼Œç»§ç»­å¤„ç†é“¾è¡¨ä¸­çš„ä¸‹ä¸€ä¸ªé«˜é€Ÿç¼“å­˜
+		 * */
 		if(time_after(searchp->lists.next_reap, jiffies))
 			goto next_unlock;
 
+		/*ä¸‹ä¸€æ¬¡"æ”¶å‰²æ—¶é—´" = ä»ç°æ—¶èµ·çš„4s*/
 		searchp->lists.next_reap = jiffies + REAPTIMEOUT_LIST3;
 
+		/*å¤šå¤„ç†å™¨ç³»ç»Ÿã€‚æ¸…ç©ºslabå…±äº«é«˜é€Ÿç¼“å­˜,åˆ™ä¼šæœ‰æ–°çš„slabè¢«é‡Šæ”¾  mm/slab.c*/
 		if (searchp->lists.shared)
 			drain_array_locked(searchp, searchp->lists.shared, 0);
 
+		/*
+		 * free_touched == 1---æœ‰æ–°çš„slabæœ€è¿‘è¢«åŠ å…¥é«˜é€Ÿç¼“å­˜
+		 * è·³è¿‡è¿™ä¸ªé«˜é€Ÿç¼“å­˜ï¼Œç»§ç»­å¤„ç†é“¾è¡¨ä¸­ä¸‹ä¸€ä¸ªé«˜é€Ÿç¼“å­˜
+		 * */
 		if (searchp->lists.free_touched) {
 			searchp->lists.free_touched = 0;
 			goto next_unlock;
 		}
 
+		/*
+		 * ç»éªŒå…¬å¼:è®¡ç®—è¦é‡Šæ”¾çš„slabæ•°é‡
+		 * åŸºæœ¬ä¸Šå–å†³äºé«˜é€Ÿç¼“å­˜ä¸­ç©ºé—²å¯¹è±¡æ•°çš„ä¸Šé™å’Œèƒ½è£…å…¥å•ä¸ªslabçš„å¯¹è±¡æ•°
+		 * */
 		tofree = (searchp->free_limit+5*searchp->num-1)/(5*searchp->num);
 		do {
 			p = list3_data(searchp)->slabs_free.next;
@@ -2955,17 +2980,20 @@ static void cache_reap(void *unused)
 			 */
 			searchp->lists.free_objects -= searchp->num;
 			spin_unlock_irq(&searchp->spinlock);
+			/*å¯¹é«˜é€Ÿç¼“å­˜ç©ºé—²slabé“¾è¡¨ä¸­çš„æ¯ä¸ªslabé‡å¤è°ƒç”¨slab_destroy()ï¼Œç›´åˆ°é“¾è¡¨ä¸ºç©ºæˆ–è€…å·²å›æ”¶ç›®æ ‡æ•°é‡çš„ç©ºé—²slab*/
 			slab_destroy(searchp, slabp);
 			spin_lock_irq(&searchp->spinlock);
 		} while(--tofree > 0);
 next_unlock:
 		spin_unlock_irq(&searchp->spinlock);
 next:
+		/*æ£€æŸ¥å½“å‰è¿›ç¨‹çš„TIF_NEED_REACHEDæ ‡å¿—*/
 		cond_resched();
 	}
 	check_irq_on();
 	up(&cache_chain_sem);
 	/* Setup the next iteration */
+	/*è°ƒåº¦è¯¥å‡½æ•°çš„ä¸‹ä¸€æ¬¡æ‰§è¡Œ*/
 	schedule_delayed_work(&__get_cpu_var(reap_work), REAPTIMEOUT_CPUC + smp_processor_id());
 }
 
