@@ -40,12 +40,12 @@ asmlinkage long sys_pipe(int __user *fildes)
 
 /*
  * 创建一个新的内存映射
- * 参数：unsigned long addr---一个可选的线性地址，内核把该地址作为新线性区应该从哪开始的一个线索
- * 	 unsigned long len---要映射的文件部分的长度
- * 	 unsigned long prot---一组权限，指定对线性区进行访问的一种或多种权限:读访问(PORT_READ),写访问(PORT_WRITE)，执行访问(PORT_EXEC)
- * 	 unsigned long flags---一组标志，进程必须显示的设置MAP_SHARED或MAP_PRIVATE来指定所请求内存映射的种类
- * 	 unsigned long fd---文件描述符，标识要映射的文件
- * 	 unsigned long off---文件内的偏移量，指定要映射的文件部分的第一个字符
+ * 参数:unsigned long addr---一个可选的线性地址，内核把该地址作为新线性区应该从哪开始的一个线索
+ * 	unsigned long len---要映射的文件部分的长度
+ * 	unsigned long prot---一组权限，指定对线性区进行访问的一种或多种权限:读访问(PORT_READ),写访问(PORT_WRITE)，执行访问(PORT_EXEC)
+ * 	unsigned long flags---一组标志，进程必须显示的设置MAP_SHARED或MAP_PRIVATE来指定所请求内存映射的种类
+ * 	unsigned long fd---文件描述符，标识要映射的文件
+ * 	unsigned long off---文件内的偏移量，指定要映射的文件部分的第一个字符
  * */
 long sys_mmap(unsigned long addr, unsigned long len, unsigned long prot, unsigned long flags,
 	unsigned long fd, unsigned long off)

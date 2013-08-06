@@ -327,9 +327,9 @@ static struct mm_struct * mm_init(struct mm_struct * mm)
  * Allocate and initialize an mm_struct.
  */
 
- /*
-  * 获得一个新的内存描述符
-  * */
+/*
+ * 获得一个新的内存描述符
+ * */
 struct mm_struct * mm_alloc(void)
 {
 	struct mm_struct * mm;

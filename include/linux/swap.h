@@ -88,10 +88,17 @@ struct zone;
  *
  * We always assume that blocks are of size PAGE_SIZE.
  */
+
+/*
+ * 交换区的交换子区(swap extent)
+ * */
 struct swap_extent {
 	struct list_head list;
+	/*交换区的子区首页索引*/
 	pgoff_t start_page;
+	/*子区的页数*/
 	pgoff_t nr_pages;
+	/*子区的起始磁盘扇区号*/
 	sector_t start_block;
 };
 

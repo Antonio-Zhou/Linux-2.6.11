@@ -242,12 +242,11 @@ out:
 }
 
 /*
-*	×÷ÓÃÓÚ¸ø¶¨×éÖĞËùÓĞ½ø³ÌµÄ»ù±¾ÓÅÏÈ¼¶
-*	°Ñ¸ø¶¨×éÖĞËùÓĞ½ø³ÌµÄ»ù±¾ÓÅÏÈ¼¶¶¼ÉèÖÃÎªÒ»¸ö¸ø¶¨µÄÖµ
-*	²ÎÊı:int which---Ö¸¶¨½ø³Ì×éµÄÖµ
-*		      int who---¸ù¾İwhichÖµÑ¡Ôñ½ø³Ì,Èç¹ûwho==0,Ôòwho = current->xxx
-*		      int niceval---ĞÂµÄ»ù±¾ÓÅÏÈ¼¶Öµ,-20(×î¸ß)--+19(×îĞ¡)
-*/
+ * ä½œç”¨äºç»™å®šç»„ä¸­æ‰€æœ‰è¿›ç¨‹çš„åŸºæœ¬ä¼˜å…ˆçº§,æŠŠç»™å®šç»„ä¸­æ‰€æœ‰è¿›ç¨‹çš„åŸºæœ¬ä¼˜å…ˆçº§éƒ½è®¾ç½®ä¸ºä¸€ä¸ªç»™å®šçš„å€¼
+ * å‚æ•°:int which---æŒ‡å®šè¿›ç¨‹ç»„çš„å€¼
+ * 	int who---æ ¹æ®whichå€¼é€‰æ‹©è¿›ç¨‹,å¦‚æœwho==0,åˆ™who = current->xxx
+ * 	int niceval---æ–°çš„åŸºæœ¬ä¼˜å…ˆçº§å€¼,-20(æœ€é«˜)--+19(æœ€å°)
+ * */
 asmlinkage long sys_setpriority(int which, int who, int niceval)
 {
 	struct task_struct *g, *p;
@@ -310,9 +309,9 @@ out:
  */
 
 /*
-*	×÷ÓÃÓÚ¸ø¶¨×éÖĞËùÓĞ½ø³ÌµÄ»ù±¾ÓÅÏÈ¼¶
-*	·µ»Ø20¼õÈ¥¸ø¶¨×éÖĞËùÓĞ½ø³ÌÖĞ×îµÍnice×Ö¶ÎµÄÖµ
-*/
+ * ä½œç”¨äºç»™å®šç»„ä¸­æ‰€æœ‰è¿›ç¨‹çš„åŸºæœ¬ä¼˜å…ˆçº§
+ * è¿”å›20å‡å»ç»™å®šç»„ä¸­æ‰€æœ‰è¿›ç¨‹ä¸­æœ€ä½niceå­—æ®µçš„å€¼
+ * */
 asmlinkage long sys_getpriority(int which, int who)
 {
 	struct task_struct *g, *p;
@@ -868,7 +867,7 @@ asmlinkage long sys_setfsuid(uid_t uid)
 }
 
 /*
- * Samma på svenska..
+ * Samma p? svenska..
  */
 asmlinkage long sys_setfsgid(gid_t gid)
 {

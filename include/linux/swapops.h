@@ -15,6 +15,12 @@
 /*
  * Store a type+offset into a swp_entry_t in an arch-independent format
  */
+
+/*
+ * 构造换出页标识符
+ * 参数:unsigned long type---交换区索引
+ * 	pgoff_t offset---页槽索引
+ * */
 static inline swp_entry_t swp_entry(unsigned long type, pgoff_t offset)
 {
 	swp_entry_t ret;
@@ -28,6 +34,10 @@ static inline swp_entry_t swp_entry(unsigned long type, pgoff_t offset)
  * Extract the `type' field from a swp_entry_t.  The swp_entry_t is in
  * arch-independent format
  */
+
+/*
+ * 从换出页标识符中提取交换区索引
+ * */
 static inline unsigned swp_type(swp_entry_t entry)
 {
 	return (entry.val >> SWP_TYPE_SHIFT(entry));
@@ -37,6 +47,10 @@ static inline unsigned swp_type(swp_entry_t entry)
  * Extract the `offset' field from a swp_entry_t.  The swp_entry_t is in
  * arch-independent format
  */
+
+/*
+ * 从换出页标识符中提取页槽索引
+ * */
 static inline pgoff_t swp_offset(swp_entry_t entry)
 {
 	return entry.val & SWP_OFFSET_MASK(entry);

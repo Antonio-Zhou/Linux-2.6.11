@@ -43,6 +43,7 @@ nodemask_t node_possible_map = NODE_MASK_ALL;
 struct pglist_data *pgdat_list;
 unsigned long totalram_pages;
 unsigned long totalhigh_pages;
+/*所有活动交换区中可用的(空闲并且无缺陷)页槽数目*/
 long nr_swap_pages;
 /*
  * results with 256, 32 in the lowmem_reserve sysctl:
@@ -62,9 +63,7 @@ EXPORT_SYMBOL(nr_swap_pages);
  * id is encoded in the upper bits of page->flags
  */
 
-/*
- * 启动时,所有内存节点的所有管理区描述符的地址初始化这个数组
- * */
+/*启动时,所有内存节点的所有管理区描述符的地址初始化这个数组*/
 struct zone *zone_table[1 << (ZONES_SHIFT + NODES_SHIFT)];
 EXPORT_SYMBOL(zone_table);
 

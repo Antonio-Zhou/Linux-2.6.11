@@ -40,7 +40,7 @@ int getrusage(struct task_struct *, int, struct rusage __user *);
 static void __unhash_process(struct task_struct *p)
 {
 	nr_threads--;
-	/*·Ö±ğ´ÓPIDTYPE_PIDºÍPIDTYPE_TGIDÀàĞÍµÄPIDÉ¢ÁĞ±íÖĞÉ¾³ı½ø³ÌÃèÊö·û*/
+	/*åˆ†åˆ«ä»PIDTYPE_PIDå’ŒPIDTYPE_TGIDç±»å‹çš„PIDæ•£åˆ—è¡¨ä¸­åˆ é™¤è¿›ç¨‹æè¿°ç¬¦*/
 	detach_pid(p, PIDTYPE_PID);
 	detach_pid(p, PIDTYPE_TGID);
 	if (thread_group_leader(p)) {
@@ -50,15 +50,16 @@ static void __unhash_process(struct task_struct *p)
 			__get_cpu_var(process_counts)--;
 	}
 
-	/*´Ó½ø³ÌÁ´±íÖĞ½â³ı½ø³Ì½ø³ÌÃèÊö·ûµÄÁ´½Ó*/
+	/*ä»è¿›ç¨‹é“¾è¡¨ä¸­è§£é™¤è¿›ç¨‹è¿›ç¨‹æè¿°ç¬¦çš„é“¾æ¥*/
 	REMOVE_LINKS(p);
 }
 
-/*´Ó½©ËÀ½ø³ÌµÄÃèÊö·ûÖĞ·ÖÀë³ö×îºóµÄÊı¾İ½á¹¹
-	¶Ô½©ËÀ½ø³ÌµÄ´¦Àí:
-		1.Èç¹û¸¸½ø³Ì²»ĞèÒª½ÓÊÕÀ´×Ô×Ó½ø³ÌµÄĞÅºÅ,¾Íµ÷ÓÃdo_exit()--ÄÚ´æ»ØÊÕÓÉ½ø³Ìµ÷¶È³ÌĞòÀ´Íê³É
-		2.Èç¹ûÒÑ¾­¸ø¸¸½ø³Ì·¢ËÍÒ»¸öĞÅºÅ,¾Íµ÷ÓÃwait4()»òwaitpid()---º¯Êı»ØÊÕÄÚ´æ
-*/
+/*
+ * ä»åƒµæ­»è¿›ç¨‹çš„æè¿°ç¬¦ä¸­åˆ†ç¦»å‡ºæœ€åçš„æ•°æ®ç»“æ„
+ * å¯¹åƒµæ­»è¿›ç¨‹çš„å¤„ç†:
+ * 	1.å¦‚æœçˆ¶è¿›ç¨‹ä¸éœ€è¦æ¥æ”¶æ¥è‡ªå­è¿›ç¨‹çš„ä¿¡å·,å°±è°ƒç”¨do_exit()--å†…å­˜å›æ”¶ç”±è¿›ç¨‹è°ƒåº¦ç¨‹åºæ¥å®Œæˆ
+ * 	2.å¦‚æœå·²ç»ç»™çˆ¶è¿›ç¨‹å‘é€ä¸€ä¸ªä¿¡å·,å°±è°ƒç”¨wait4()æˆ–waitpid()---å‡½æ•°å›æ”¶å†…å­˜
+ * */
 void release_task(struct task_struct * p)
 {
 	int zap_leader;
@@ -66,20 +67,24 @@ void release_task(struct task_struct * p)
 	struct dentry *proc_dentry;
 
 repeat: 
-	/*µİ¼õÖÕÖ¹½ø³ÌÓµÓĞÕßµÄ½ø³Ì¸öÊı*/
+	/*é€’å‡ç»ˆæ­¢è¿›ç¨‹æ‹¥æœ‰è€…çš„è¿›ç¨‹ä¸ªæ•°*/
 	atomic_dec(&p->user->processes);
 	spin_lock(&p->proc_lock);
 	proc_dentry = proc_pid_unhash(p);
 	write_lock_irq(&tasklist_lock);
 	if (unlikely(p->ptrace))
-		/*½ø³ÌÕıÔÚ±»¸ú×Ù,½«Ëü´Óµ÷ÊÔ³ÌĞòµÄptrace_childrenÁ´±íÖĞÉ¾³ı
-			²¢ÈÃ¸Ã³ÌĞòÖØĞÂÊôÓÚ³õÊ¶µÄ¸¸½ø³Ì*/
+		/*
+		 * è¿›ç¨‹æ­£åœ¨è¢«è·Ÿè¸ª,å°†å®ƒä»è°ƒè¯•ç¨‹åºçš„ptrace_childrené“¾è¡¨ä¸­åˆ é™¤
+		 * å¹¶è®©è¯¥ç¨‹åºé‡æ–°å±äºåˆè¯†çš„çˆ¶è¿›ç¨‹
+		 * */
 		__ptrace_unlink(p);
 	BUG_ON(!list_empty(&p->ptrace_list) || !list_empty(&p->ptrace_children));
-	/*É¾³ıËùÓĞµÄ¹ÒÆğĞÅºÅ²¢ÊÍ·Å½ø³ÌµÄsignal_structÃèÊö·û
-		Èç¹û¸ÃÃèÊö·û²»ÔÙ±»ÆäËûµÄÇáÁ¿¼¶½ø³ÌÊ¹ÓÃ,º¯Êı½øÒ»²½É¾³ıÕâ¸öÊı¾İ½á¹¹*/
+	/*
+	 * åˆ é™¤æ‰€æœ‰çš„æŒ‚èµ·ä¿¡å·å¹¶é‡Šæ”¾è¿›ç¨‹çš„signal_structæè¿°ç¬¦
+	 * å¦‚æœè¯¥æè¿°ç¬¦ä¸å†è¢«å…¶ä»–çš„è½»é‡çº§è¿›ç¨‹ä½¿ç”¨,å‡½æ•°è¿›ä¸€æ­¥åˆ é™¤è¿™ä¸ªæ•°æ®ç»“æ„
+	 * */
 	__exit_signal(p);
-	/*É¾³ıĞÅºÅ´¦Àíº¯Êı*/
+	/*åˆ é™¤ä¿¡å·å¤„ç†å‡½æ•°*/
 	__exit_sighand(p);
 	
 	__unhash_process(p);
@@ -91,10 +96,10 @@ repeat:
 	 */
 	zap_leader = 0;
 	leader = p->group_leader;
-	/*²»ÊÇÏß³Ì×éµÄÁìÍ·½ø³Ì,ÁìÍ·½ø³Ì´¦ÓÚ½©ËÀ×´Ì¬,¶øÇÒ½ø³ÌÊÇÏß³Ì×éµÄ×îºóÒ»¸ö³ÉÔ±*/
+	/*ä¸æ˜¯çº¿ç¨‹ç»„çš„é¢†å¤´è¿›ç¨‹,é¢†å¤´è¿›ç¨‹å¤„äºåƒµæ­»çŠ¶æ€,è€Œä¸”è¿›ç¨‹æ˜¯çº¿ç¨‹ç»„çš„æœ€åä¸€ä¸ªæˆå‘˜*/
 	if (leader != p && thread_group_empty(leader) && leader->exit_state == EXIT_ZOMBIE) {
 		BUG_ON(leader->exit_signal == -1);
-		/*ÏòÁìÍ·½ø³ÌµÄ¸¸½ø³Ì·¢ËÍÒ»¸öĞÅºÅ£¬Í¨ÖªËü½ø³ÌÒÑËÀÍö*/
+		/*å‘é¢†å¤´è¿›ç¨‹çš„çˆ¶è¿›ç¨‹å‘é€ä¸€ä¸ªä¿¡å·ï¼Œé€šçŸ¥å®ƒè¿›ç¨‹å·²æ­»äº¡*/
 		do_notify_parent(leader, leader->exit_signal);
 		/*
 		 * If we were the last child thread and the leader has
@@ -107,14 +112,16 @@ repeat:
 		zap_leader = (leader->exit_signal == -1);
 	}
 
-	/*µ÷Õû¸¸½ø³ÌµÄÊ±¼äÆ¬*/
+	/*è°ƒæ•´çˆ¶è¿›ç¨‹çš„æ—¶é—´ç‰‡*/
 	sched_exit(p);
 	write_unlock_irq(&tasklist_lock);
 	spin_unlock(&p->proc_lock);
 	proc_pid_flush(proc_dentry);
 	release_thread(p);
-	/*µİ¼õ½ø³ÌÃèÊö·ûµÄÊ¹ÓÃ¼ÆÊıÆ÷
-		Èç¹û¼ÆÊıÆ÷±äÎª0,Ôòº¯ÊıÖÕÖ¹ËùÓĞ²ĞÁôµÄ¶Ô½ø³ÌµÄÒıÓÃ*/
+	/*
+	 * é€’å‡è¿›ç¨‹æè¿°ç¬¦çš„ä½¿ç”¨è®¡æ•°å™¨
+	 * å¦‚æœè®¡æ•°å™¨å˜ä¸º0,åˆ™å‡½æ•°ç»ˆæ­¢æ‰€æœ‰æ®‹ç•™çš„å¯¹è¿›ç¨‹çš„å¼•ç”¨
+	 * */
 	put_task_struct(p);
 
 	p = leader;
@@ -762,11 +769,11 @@ static void exit_notify(struct task_struct *tsk)
 		int signal = tsk->parent == tsk->real_parent ? tsk->exit_signal : SIGCHLD;
 		do_notify_parent(tsk, signal);
 	} else if (tsk->ptrace) {
-		/*Ö»Òª½ø³ÌÕıÔÚ±»¸ú×Ù,¾ÍÏò¸¸½ø³Ì·¢ËÍÒ»¸öSIGCHLD,Í¨Öª¸¸½ø³Ì×Ó½ø³ÌËÀÍö*/
+		/*åªè¦è¿›ç¨‹æ­£åœ¨è¢«è·Ÿè¸ª,å°±å‘çˆ¶è¿›ç¨‹å‘é€ä¸€ä¸ªSIGCHLD,é€šçŸ¥çˆ¶è¿›ç¨‹å­è¿›ç¨‹æ­»äº¡*/
 		do_notify_parent(tsk, SIGCHLD);
 	}
 
-	/*½ø³ÌÃèÊö·ûexit_signal != -1,»ò½ø³ÌÕıÔÚ±»¸ú×Ù*/
+	/*è¿›ç¨‹æè¿°ç¬¦exit_signal != -1,æˆ–è¿›ç¨‹æ­£åœ¨è¢«è·Ÿè¸ª*/
 	state = EXIT_ZOMBIE;
 	if (tsk->exit_signal == -1 &&
 	    (likely(tsk->ptrace == 0) ||
@@ -791,7 +798,7 @@ static void exit_notify(struct task_struct *tsk)
 
 	/* If the process is dead, release it - nobody will wait for it */
 	if (state == EXIT_DEAD)
-		/*»ØÊÕ½ø³ÌµÄÆäËûÊı¾İ½á¹¹Õ¼ÓÃµÄÄÚ´æ*/
+		/*å›æ”¶è¿›ç¨‹çš„å…¶ä»–æ•°æ®ç»“æ„å ç”¨çš„å†…å­˜*/
 		release_task(tsk);
 
 	/* PF_DEAD causes final put_task_struct after we schedule. */
@@ -820,9 +827,9 @@ fastcall NORET_TYPE void do_exit(long code)
 		ptrace_notify((PTRACE_EVENT_EXIT << 8) | SIGTRAP);
 	}
 
-	/*ÖÃPF_EXITING±êÖ¾,±íÊ¾½ø³ÌÕıÔÚÉ¾³ı*/
+	/*ç½®PF_EXITINGæ ‡å¿—,è¡¨ç¤ºè¿›ç¨‹æ­£åœ¨åˆ é™¤*/
 	tsk->flags |= PF_EXITING;
-	/*´Ó¶¯Ì¬¶¨Ê±Æ÷¶ÓÁĞÖĞÉ¾³ı½ø³ÌÃèÊö·û*/
+	/*ä»åŠ¨æ€å®šæ—¶å™¨é˜Ÿåˆ—ä¸­åˆ é™¤è¿›ç¨‹æè¿°ç¬¦*/
 	del_timer_sync(&tsk->real_timer);
 
 	if (unlikely(in_atomic()))
@@ -836,16 +843,21 @@ fastcall NORET_TYPE void do_exit(long code)
 	if (group_dead)
 		acct_process(code);
 
-	/*µ÷ÓÃÏÂÃæµÄº¯Êı,´Ó½ø³Ì ÃèÊö·ûÖĞ·ÖÀë³öÏà¹ØµÄÊı¾İ½á¹¹
-	Èç¹ûÃ»ÓĞÆäËû½ø³Ì¹²Ïí,Ôò½«É¾³ıËüÃÇ*/
-	exit_mm(tsk);			/*·ÖÒ³*/
-
-	exit_sem(tsk);			/*ĞÅºÅÁ¿*/
-	__exit_files(tsk);			/*ÎÄ¼şÏµÍ³*/
-	__exit_fs(tsk);			/*´ò¿ªÎÄ¼şÃèÊö·û*/
-	exit_namespace(tsk);		/*ÃüÃû¿Õ¼ä*/
-	exit_thread();			/*I/OÈ¨ÏŞÎ»Í¼*/
-	exit_keys(tsk);			/*ÊÍ·ÅÏß³Ì»á»°ºÍ½ø³Ì°²È«¼ü*/
+	/*è°ƒç”¨ä¸‹é¢çš„å‡½æ•°,ä»è¿›ç¨‹ æè¿°ç¬¦ä¸­åˆ†ç¦»å‡ºç›¸å…³çš„æ•°æ®ç»“æ„,å¦‚æœæ²¡æœ‰å…¶ä»–è¿›ç¨‹å…±äº«,åˆ™å°†åˆ é™¤å®ƒä»¬*/
+	/*åˆ†é¡µ*/
+	exit_mm(tsk);
+	/*ä¿¡å·é‡*/
+	exit_sem(tsk);
+	/*æ–‡ä»¶ç³»ç»Ÿ*/
+	__exit_files(tsk);
+	/*æ‰“å¼€æ–‡ä»¶æè¿°ç¬¦*/
+	__exit_fs(tsk);
+	/*å‘½åç©ºé—´*/
+	exit_namespace(tsk);
+	/*I/Oæƒé™ä½å›¾*/
+	exit_thread();
+	/*é‡Šæ”¾çº¿ç¨‹ä¼šè¯å’Œè¿›ç¨‹å®‰å…¨é”®*/
+	exit_keys(tsk);
 
 	if (group_dead && tsk->signal->leader)
 		disassociate_ctty(1);
@@ -854,7 +866,7 @@ fastcall NORET_TYPE void do_exit(long code)
 	if (tsk->binfmt)
 		module_put(tsk->binfmt->module);
 
-	/*exit_codeÉèÖÃ³É½ø³ÌµÄÖÕÖ¹´úºÅ*/
+	/*exit_codeè®¾ç½®æˆè¿›ç¨‹çš„ç»ˆæ­¢ä»£å·*/
 	tsk->exit_code = code;
 	exit_notify(tsk);
 #ifdef CONFIG_NUMA
@@ -900,9 +912,9 @@ do_group_exit(int exit_code)
 {
 	BUG_ON(exit_code & 0x80); /* core dumps don't get here */
 
-	/*SIGNAL_GROUP_EXIT != 0 ËµÃ÷ÄÚºËÒÑ¾­¿ªÊ¼ÎªÏß³Ì×éÖ´ĞĞÍË³öµÄ¹ı³Ì*/
+	/*SIGNAL_GROUP_EXIT != 0 è¯´æ˜å†…æ ¸å·²ç»å¼€å§‹ä¸ºçº¿ç¨‹ç»„æ‰§è¡Œé€€å‡ºçš„è¿‡ç¨‹*/
 	if (current->signal->flags & SIGNAL_GROUP_EXIT)
-		/*½«current->signal->group_exit_codeµ±×öÍË³öÂë£¬Ö±½Ó¾Ído_exit()*/
+		/*å°†current->signal->group_exit_codeå½“åšé€€å‡ºç ï¼Œç›´æ¥å°±do_exit()*/
 		exit_code = current->signal->group_exit_code;
 	else if (!thread_group_empty(current)) {
 		struct signal_struct *const sig = current->signal;
@@ -913,11 +925,13 @@ do_group_exit(int exit_code)
 			/* Another thread got here before we took the lock.  */
 			exit_code = sig->group_exit_code;
 		else {
-			/*ÉèÖÃ½ø³ÌµÄSIGNAL_GROUP_EXIT
-			°ÑÖÕÖ¹´úºÅ´æ·Åµ½ sig->group_exit_code*/
+			/*
+			 * è®¾ç½®è¿›ç¨‹çš„SIGNAL_GROUP_EXIT
+			 * æŠŠç»ˆæ­¢ä»£å·å­˜æ”¾åˆ° sig->group_exit_code
+			 * */
 			sig->flags = SIGNAL_GROUP_EXIT;
 			sig->group_exit_code = exit_code;
-			/*É±ËÀcurrentÏß³Ì×éÖĞµÄÆäËû½ø³Ì(Èç¹ûÓĞµÄ»°)*/
+			/*æ€æ­»currentçº¿ç¨‹ç»„ä¸­çš„å…¶ä»–è¿›ç¨‹(å¦‚æœæœ‰çš„è¯)*/
 			zap_other_threads(current);
 		}
 		spin_unlock_irq(&sighand->siglock);
