@@ -142,9 +142,9 @@ int get_user_pages(struct task_struct *tsk, struct mm_struct *mm,
 	return(i);
 }
 
-/*对下面这个链表的保护*/
+/*瀵逛笅闈㈣繖涓摼琛ㄧ殑淇濇姢*/
 DEFINE_RWLOCK(vmlist_lock);
-/*vm_struct描述符的链表,存放了链表第一个元素的地址*/
+/*vm_struct鎻忚堪绗︾殑閾捐〃,瀛樻斁浜嗛摼琛ㄧ涓�涓厓绱犵殑鍦板潃*/
 struct vm_struct *vmlist;
 
 void vfree(void *addr)

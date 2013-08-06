@@ -53,23 +53,23 @@ static void free_pool(mempool_t *pool)
  */
 
 /*
-*	´´½¨Ò»¸öÐÂµÄÄÚ´æ³Ø
-*	²ÎÊý:int min_nr---ÄÚ´æÔªËØµÄ¸öÊý
-*		      mempool_alloc_t *alloc_fn---ÊµÏÖalloc·½·¨µÄº¯ÊýµÄµØÖ·
-*		      mempool_free_t *free_fn---ÊµÏÖfree·½·¨µÄº¯ÊýµÄµØÖ·
-*		      void *pool_dat---¸³¸øpool_data×Ö¶ÎµÄÈÎÒâÖµ
-*/
+ * åˆ›å»ºä¸€ä¸ªæ–°çš„å†…å­˜æ± 
+ * å‚æ•°:int min_nr---å†…å­˜å…ƒç´ çš„ä¸ªæ•°
+ * 	mempool_alloc_t *alloc_fn---å®žçŽ°allocæ–¹æ³•çš„å‡½æ•°çš„åœ°å€
+ * 	mempool_free_t *free_fn---å®žçŽ°freeæ–¹æ³•çš„å‡½æ•°çš„åœ°å€
+ * 	void *pool_dat---èµ‹ç»™pool_dataå­—æ®µçš„ä»»æ„å€¼
+ * */
 mempool_t * mempool_create(int min_nr, mempool_alloc_t *alloc_fn,
 				mempool_free_t *free_fn, void *pool_data)
 {
 	mempool_t *pool;
 
-	/*Îªmempool_t¶ÔÏó·ÖÅäÄÚ´æ*/
+	/*ä¸ºmempool_tå¯¹è±¡åˆ†é…å†…å­˜*/
 	pool = kmalloc(sizeof(*pool), GFP_KERNEL);
 	if (!pool)
 		return NULL;
 	memset(pool, 0, sizeof(*pool));	
-	/*ÎªÖ¸ÏòÄÚ´æÔªËØµÄÖ¸ÕëÊý×é·ÖÅäÄÚ´æ*/
+	/*ä¸ºæŒ‡å‘å†…å­˜å…ƒç´ çš„æŒ‡é’ˆæ•°ç»„åˆ†é…å†…å­˜*/
 	pool->elements = kmalloc(min_nr * sizeof(void *), GFP_KERNEL);
 	if (!pool->elements) {
 		kfree(pool);
@@ -86,7 +86,7 @@ mempool_t * mempool_create(int min_nr, mempool_alloc_t *alloc_fn,
 	 * First pre-allocate the guaranteed number of buffers.
 	 */
 	 
-	 /*·´¸´µ÷ÓÃalloc·½·¨À´µÃµ½min_nr¸öÄÚ´æÔªËØ*/
+	 /*åå¤è°ƒç”¨allocæ–¹æ³•æ¥å¾—åˆ°min_nrä¸ªå†…å­˜å…ƒç´ */
 	while (pool->curr_nr < pool->min_nr) {
 		void *element;
 
@@ -182,8 +182,8 @@ EXPORT_SYMBOL(mempool_resize);
  */
 
 /*
-*	ÊÍ·Å³ØÖÐËùÓÐÄÚ´æÔªËØ,È»ºóÊÍ·ÅÔªËØÊý×éºÍmempool_t¶ÔÏó×Ô¼º
-*/
+ * é‡Šæ”¾æ± ä¸­æ‰€æœ‰å†…å­˜å…ƒç´ ,ç„¶åŽé‡Šæ”¾å…ƒç´ æ•°ç»„å’Œmempool_tå¯¹è±¡è‡ªå·±
+ * */
 void mempool_destroy(mempool_t *pool)
 {
 	if (pool->curr_nr != pool->min_nr)
@@ -205,10 +205,10 @@ EXPORT_SYMBOL(mempool_destroy);
  */
 
 /*
-*	´ÓÄÚ´æ³Ø·ÖÅäÒ»¸öÔªËØ
-*	²ÎÊý:mempool_t *pool---½«mempool_t¶ÔÏóµÄµØÖ·
-*		      int gfp_mask---ÄÚ´æ·ÖÅä±êÖ¾
-*/
+ * ä»Žå†…å­˜æ± åˆ†é…ä¸€ä¸ªå…ƒç´ 
+ * å‚æ•°:mempool_t *pool---å°†mempool_tå¯¹è±¡çš„åœ°å€
+ * 	int gfp_mask---å†…å­˜åˆ†é…æ ‡å¿—
+ * */
 void * mempool_alloc(mempool_t *pool, int gfp_mask)
 {
 	void *element;
@@ -271,14 +271,14 @@ EXPORT_SYMBOL(mempool_alloc);
  */
 
 /*
-*	ÊÍ·ÅÒ»¸öÔªËØµ½ÄÚ´æ³Ø
-*/
+ * é‡Šæ”¾ä¸€ä¸ªå…ƒç´ åˆ°å†…å­˜æ± 
+ * */
 void mempool_free(void *element, mempool_t *pool)
 {
 	unsigned long flags;
 
 	mb();
-	/*ÄÚ´æ³ØÎ´Âú*/
+	/*å†…å­˜æ± æœªæ»¡*/
 	if (pool->curr_nr < pool->min_nr) {
 		spin_lock_irqsave(&pool->lock, flags);
 		if (pool->curr_nr < pool->min_nr) {
@@ -289,7 +289,7 @@ void mempool_free(void *element, mempool_t *pool)
 		}
 		spin_unlock_irqrestore(&pool->lock, flags);
 	}
-	/*ÒÑÂú,µ÷ÓÃfree·½·¨À´ÊÍ·ÅÔªËØµ½»ù±¾ÄÚ´æ·ÖÅäÆ÷*/
+	/*å·²æ»¡,è°ƒç”¨freeæ–¹æ³•æ¥é‡Šæ”¾å…ƒç´ åˆ°åŸºæœ¬å†…å­˜åˆ†é…å™¨*/
 	pool->free(element, pool->pool_data);
 }
 EXPORT_SYMBOL(mempool_free);

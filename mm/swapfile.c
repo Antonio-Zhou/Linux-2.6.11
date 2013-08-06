@@ -110,6 +110,7 @@ static inline int scan_swap_map(struct swap_info_struct *si)
 	 * prevents us from scattering swap pages all over the entire
 	 * swap partition, so that we reduce overall disk seek times
 	 * between swap pages.  -- sct */
+
 	/*cluster_nr > 0,就从cluster_next索引处的元素开始对计数器的swap_map数组进行扫描，查找一个空项*/
 	if (si->cluster_nr) {
 		while (si->cluster_next <= si->highest_bit) {
@@ -147,6 +148,7 @@ static inline int scan_swap_map(struct swap_info_struct *si)
 		goto got_page;
 	}
 	/* No luck, so now go finegrined as usual. -Andrea */
+
 	/*没找到SWAPFILE_CLUSTER个空闲页槽的一个组，从lowest_bit处重新扫描这个数组，试图找到一个单独的空闲页槽*/
 	for (offset = si->lowest_bit; offset <= si->highest_bit ; offset++) {
 		if (si->swap_map[offset])
@@ -208,9 +210,12 @@ swp_entry_t get_swap_page(void)
 			if (offset) {
 				entry = swp_entry(type,offset);
 				type = swap_info[type].next;
+				/*下一个交换区的优先级和这个交换区不同*/
 				if (type < 0 ||
 					p->prio != swap_info[type].prio) {
+						/*设置成交换区链表的第一个交换区(下次搜索会从优先级高的交换区开始)*/
 						swap_list.next = swap_list.head;
+				/*下一个交换区的优先级和这个交换区相同(轮询使用这些交换区)*/
 				} else {
 					swap_list.next = type;
 				}
@@ -218,6 +223,11 @@ swp_entry_t get_swap_page(void)
 			}
 		}
 		type = p->next;
+		/*
+		 * 交换区链表的下一个交换区的优先级 < 前一个交换区的优先级
+		 * 第一次(局部)扫描，就考虑链表中的第一个交换区，开始第二次扫描
+		 * 否则就检查交换区链表是否有下一个元素
+		 * */
 		if (!wrapped) {
 			if (type < 0 || p->prio != swap_info[type].prio) {
 				type = swap_list.head;
@@ -229,6 +239,7 @@ swp_entry_t get_swap_page(void)
 	}
 out:
 	swap_list_unlock();
+	/*分配的页槽所对应的换出页标识符*/
 	return entry;
 }
 
@@ -300,10 +311,17 @@ static int swap_entry_free(struct swap_info_struct *p, unsigned long offset)
  * Caller has made sure that the swapdevice corresponding to entry
  * is still around or has not been recycled.
  */
+
+/*
+ * 换入页时，函数对相应的swap_map计数器进行减1操作
+ * 当计数器 == 0--->由于页槽的标识符不再包含在任何页表项中，因此页槽变成空闲
+ * 参数:swp_entry_t entry---换出标识符
+ * */
 void swap_free(swp_entry_t entry)
 {
 	struct swap_info_struct * p;
 
+	/*导出交换区索引和页槽索引，并获得交换区描述符的地址*/
 	p = swap_info_get(entry);
 	if (p) {
 		swap_entry_free(p, swp_offset(entry));
