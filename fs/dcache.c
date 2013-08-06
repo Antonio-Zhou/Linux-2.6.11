@@ -42,7 +42,7 @@ seqlock_t rename_lock __cacheline_aligned_in_smp = SEQLOCK_UNLOCKED;
 
 EXPORT_SYMBOL(dcache_lock);
 
-/*Ä¿Â¼Ïî¶ÔÏóµÄ´æ·Å*/
+/*ç›®å½•é¡¹å¯¹è±¡çš„å­˜æ”¾*/
 static kmem_cache_t *dentry_cache; 
 
 #define DNAME_INLINE_LEN (sizeof(struct dentry)-offsetof(struct dentry,d_iname))
@@ -387,8 +387,8 @@ static inline void prune_one_dentry(struct dentry * dentry)
  */
  
 /*
- * É¨ÃèÎ´ÓÃÄ¿Â¼ÏîÁ´±í£¬Ò»Ö±µ½»ñµÃÇëÇóÊıÁ¿µÄÊÍ·Å¶ÔÏó»òÕû¸öÁ´±íÉ¨ÃèÍê±Ï
- * ¿ÉÒÔÓĞĞ§µÄ½øĞĞÒ³¿ò»ØÊÕ
+ * æ‰«ææœªç”¨ç›®å½•é¡¹é“¾è¡¨ï¼Œä¸€ç›´åˆ°è·å¾—è¯·æ±‚æ•°é‡çš„é‡Šæ”¾å¯¹è±¡æˆ–æ•´ä¸ªé“¾è¡¨æ‰«æå®Œæ¯•
+ * å¯ä»¥æœ‰æ•ˆçš„è¿›è¡Œé¡µæ¡†å›æ”¶
  * */
 static void prune_dcache(int count)
 {
@@ -697,28 +697,28 @@ void shrink_dcache_anon(struct hlist_head *head)
  */
 
 /*
- * Ä¿Â¼Ïî¸ßËÙ»º´æµÄshrinkº¯Êı.
- * ËÑË÷¸ßËÙ»º´æÖĞµÄÎ´ÓÃÄ¿Â¼Ïî¶ÔÏó£¬¼´Ã»ÓĞ±»ÈÎºÎ½ø³ÌÒıÓÃµÄÄ¿Â¼Ïî¶ÔÏó£¬È»ºóÊÍ·ÅËüÃÇ
- * Ä¿Â¼Ïî¸ßËÙ»º´æÆğË÷Òı½Úµã¸ßËÙ»º´æ¿ØÖÆÆ÷µÄ×÷ÓÃ¡£µ±Ò»¸öÄ¿Â¼Ïî¶ÔÏó±»ÊÍ·ÅÊ±£¬´æ·ÅÏàÓ¦Ë÷Òı½Úµã¶ÔÏóµÄÒ³¾Í¿ÉÒÔ±äÎªÎ´ÓÃ£¬¶ø×îÖÕ±»ÊÍ·Å
- * ²ÎÊı:int nr---´ı»ØÊÕÒ³¿òÊı
- * 	unsigned int gfp_mask---GFPÑÚÂë
+ * ç›®å½•é¡¹é«˜é€Ÿç¼“å­˜çš„shrinkå‡½æ•°.
+ * æœç´¢é«˜é€Ÿç¼“å­˜ä¸­çš„æœªç”¨ç›®å½•é¡¹å¯¹è±¡ï¼Œå³æ²¡æœ‰è¢«ä»»ä½•è¿›ç¨‹å¼•ç”¨çš„ç›®å½•é¡¹å¯¹è±¡ï¼Œç„¶åé‡Šæ”¾å®ƒä»¬
+ * ç›®å½•é¡¹é«˜é€Ÿç¼“å­˜èµ·ç´¢å¼•èŠ‚ç‚¹é«˜é€Ÿç¼“å­˜æ§åˆ¶å™¨çš„ä½œç”¨ã€‚å½“ä¸€ä¸ªç›®å½•é¡¹å¯¹è±¡è¢«é‡Šæ”¾æ—¶ï¼Œå­˜æ”¾ç›¸åº”ç´¢å¼•èŠ‚ç‚¹å¯¹è±¡çš„é¡µå°±å¯ä»¥å˜ä¸ºæœªç”¨ï¼Œè€Œæœ€ç»ˆè¢«é‡Šæ”¾
+ * å‚æ•°:int nr---å¾…å›æ”¶é¡µæ¡†æ•°
+ * 	unsigned int gfp_mask---GFPæ©ç 
  * */
 static int shrink_dcache_memory(int nr, unsigned int gfp_mask)
 {
 	if (nr) {
-		/*¼ì²é__GFP_FSÊÇ·ñÇå0£¬ÒòÎªÊÍ·ÅÄ¿Â¼Ïî¿ÉÄÜ´¥·¢»ùÓÚ´ÅÅÌÎÄ¼şÏµÍ³²Ù×÷*/
+		/*æ£€æŸ¥__GFP_FSæ˜¯å¦æ¸…0ï¼Œå› ä¸ºé‡Šæ”¾ç›®å½•é¡¹å¯èƒ½è§¦å‘åŸºäºç£ç›˜æ–‡ä»¶ç³»ç»Ÿæ“ä½œ*/
 		if (!(gfp_mask & __GFP_FS))
 			return -1;
 		/*
-		 * É¨ÃèÎ´ÓÃÄ¿Â¼ÏîÁ´±í£¬Ò»Ö±µ½»ñµÃÇëÇóÊıÁ¿µÄÊÍ·Å¶ÔÏó»òÕû¸öÁ´±íÉ¨ÃèÍê±Ï
-		 * ¿ÉÒÔÓĞĞ§µÄ½øĞĞÒ³¿ò»ØÊÕ
+		 * æ‰«ææœªç”¨ç›®å½•é¡¹é“¾è¡¨ï¼Œä¸€ç›´åˆ°è·å¾—è¯·æ±‚æ•°é‡çš„é‡Šæ”¾å¯¹è±¡æˆ–æ•´ä¸ªé“¾è¡¨æ‰«æå®Œæ¯•
+		 * å¯ä»¥æœ‰æ•ˆçš„è¿›è¡Œé¡µæ¡†å›æ”¶
 		 * */
 		prune_dcache(nr);
 	}
 	/*
 	 * sysctl_vfs_cache_pressure == 100
-	 * ¿ÉÒÔÍ¨¹ı/proc/sys/vm/vfs_cache_pressureĞŞ¸Ä
-	 * Èô > 100£ºshrink_slab()´ÓÄ¿Â¼Ïî¸ßËÙ»º´æ»ØÊÕµÄÒ³¶àÓÚ´ÓLRUÁ´±íÖĞ»ØÊÕµÄÒ³
+	 * å¯ä»¥é€šè¿‡/proc/sys/vm/vfs_cache_pressureä¿®æ”¹
+	 * è‹¥ > 100ï¼šshrink_slab()ä»ç›®å½•é¡¹é«˜é€Ÿç¼“å­˜å›æ”¶çš„é¡µå¤šäºä»LRUé“¾è¡¨ä¸­å›æ”¶çš„é¡µ
 	 * */
 	return (dentry_stat.nr_unused / 100) * sysctl_vfs_cache_pressure;
 }
@@ -1046,8 +1046,8 @@ struct dentry *d_splice_alias(struct inode *inode, struct dentry *dentry)
  */
 
 /*
-*	ÔÚÉ¢ÁĞ±íÖĞ²éÕÒ¸ø¶¨µÄ¸¸Ä¿Â¼Ïî¶ÔÏóºÍÎÄ¼şÃû
-*/
+ * åœ¨æ•£åˆ—è¡¨ä¸­æŸ¥æ‰¾ç»™å®šçš„çˆ¶ç›®å½•é¡¹å¯¹è±¡å’Œæ–‡ä»¶å
+ * */
 struct dentry * d_lookup(struct dentry * parent, struct qstr * name)
 {
 	struct dentry * dentry = NULL;
@@ -1726,7 +1726,7 @@ static void __init dcache_init(unsigned long mempages)
 kmem_cache_t *names_cachep;
 
 /* SLAB cache for file structures */
-/*ÎÄ¼ş¶ÔÏóÍ¨¹ıfilpµÄ¸ßËÙ»º´æ·ÖÅä,filpµØÖ··ÅÔÚfilp_cachep*/
+/*æ–‡ä»¶å¯¹è±¡é€šè¿‡filpçš„é«˜é€Ÿç¼“å­˜åˆ†é…,filpåœ°å€æ”¾åœ¨filp_cachep*/
 kmem_cache_t *filp_cachep;
 
 EXPORT_SYMBOL(d_genocide);
