@@ -423,8 +423,13 @@ static int shrink_list(struct list_head *page_list, struct scan_control *sc)
 		 * Anonymous process memory has backing store?
 		 * Try to allocate it some swap space here.
 		 */
-		/*要回收匿名页，就必须把它加入交换高速缓存，那么就必须在交换区为它保留一个新页槽(slot)*/
+		/*
+		 * PageAnon(page) == 1--->该页是匿名页
+		 * PageSwapCache(page) == 0--->交换高速缓存中没有相应的页框
+		 * 要回收匿名页，就必须把它加入交换高速缓存，那么就必须在交换区为它保留一个新页槽(slot)
+		 * */
 		if (PageAnon(page) && !PageSwapCache(page)) {
+			/*在交换区中分配一个新页槽，并把一个页框插入交换高速缓存  mm/swap_state.c*/
 			if (!add_to_swap(page))
 				goto activate_locked;
 		}
@@ -440,7 +445,7 @@ static int shrink_list(struct list_head *page_list, struct scan_control *sc)
 		 */
 		/*页在某个进程用户态地址空间*/
 		if (page_mapped(page) && mapping) {
-			/*寻找引用该页框的所有页表项*/
+			/*寻找引用该页框的所有页表项，把换出页标识写入其中*/
 			switch (try_to_unmap(page)) {
 			case SWAP_FAIL:
 				goto activate_locked;

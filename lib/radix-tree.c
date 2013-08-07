@@ -336,9 +336,9 @@ EXPORT_SYMBOL(radix_tree_lookup);
 
 /*
  * 设置页高速缓存中页的PG_dirty和PG_writeback标志
- * 参数：struct radix_tree_root *root---基树的根
- * 	 unsigned long index---页的索引
- * 	 int tag---要设置的标记的类型
+ * 参数:struct radix_tree_root *root---基树的根
+ * 	unsigned long index---页的索引
+ * 	int tag---要设置的标记的类型
  * */
 void *radix_tree_tag_set(struct radix_tree_root *root,
 			unsigned long index, int tag)
@@ -384,9 +384,9 @@ EXPORT_SYMBOL(radix_tree_tag_set);
 
 /*
  * 清除页高速缓存中页的PG_dirty和PG_writeback标志
- * 参数：struct radix_tree_root *root---基树的根
- * 	 unsigned long index---页的索引
- * 	 int tag---要设置的标记的类型
+ * 参数:struct radix_tree_root *root---基树的根
+ * 	unsigned long index---页的索引
+ * 	int tag---要设置的标记的类型
  * */
 void *radix_tree_tag_clear(struct radix_tree_root *root,
 			unsigned long index, int tag)
@@ -679,8 +679,8 @@ EXPORT_SYMBOL(radix_tree_gang_lookup_tag);
 
 /*
  * 从树中删除节点
- * 参数：struct radix_tree_root *root---树跟的地址
- * 	 unsigned long index---要删除的页索引
+ * 参数:struct radix_tree_root *root---树跟的地址
+ * 	unsigned long index---要删除的页索引
  * */
 void *radix_tree_delete(struct radix_tree_root *root, unsigned long index)
 {
@@ -772,8 +772,8 @@ EXPORT_SYMBOL(radix_tree_delete);
 
 /*
  * 利用树的所有节点的标志数组来测试基树是否至少包括一个指定状态的页
- * 参数：struct radix_tree_root *root---基树的根
- * 	 int tag---要测试的标记
+ * 参数:struct radix_tree_root *root---基树的根
+ * 	int tag---要测试的标记
  * */
 int radix_tree_tagged(struct radix_tree_root *root, int tag)
 {

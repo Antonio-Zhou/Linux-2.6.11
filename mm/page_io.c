@@ -44,6 +44,10 @@ static struct bio *get_swap_bio(int gfp_flags, pgoff_t index,
 	return bio;
 }
 
+/*
+ * 一旦I/O数据传输结束，就执行该函数。
+ * 该函数唤醒正等待页PG_writebask标志清的所有进程，清除PG_writeback标志和技术中的相关标记，并释放用于I/O传输的bio描述符
+ * */
 static int end_swap_bio_write(struct bio *bio, unsigned int bytes_done, int err)
 {
 	const int uptodate = test_bit(BIO_UPTODATE, &bio->bi_flags);
@@ -82,15 +86,26 @@ static int end_swap_bio_read(struct bio *bio, unsigned int bytes_done, int err)
  * We may have stale swap cache pages in memory: notice
  * them here and get rid of the unnecessary final write.
  */
+
+/*
+ * swapper_state对象的writepage方法
+ * */
 int swap_writepage(struct page *page, struct writeback_control *wbc)
 {
 	struct bio *bio;
 	int ret = 0, rw = WRITE;
 
+	/*
+	 * 检查是否至少有一个用户态进程引用该页
+	 * 若没有，从交换高速缓存删除该页，并返回0
+	 * 检查的理由:
+	 * 	因为一个进程可能会与PFRA发生竞争并在shrink_list()检查完后释放一页
+	 * */
 	if (remove_exclusive_swap_page(page)) {
 		unlock_page(page);
 		goto out;
 	}
+	/*分配并初始化一个bio描述符  mm/page_io.c*/
 	bio = get_swap_bio(GFP_NOIO, page->private, page, end_swap_bio_write);
 	if (bio == NULL) {
 		set_page_dirty(page);
@@ -108,6 +123,9 @@ out:
 	return ret;
 }
 
+/*
+ * 从交换区读入新页数据
+ * */
 int swap_readpage(struct file *file, struct page *page)
 {
 	struct bio *bio;
@@ -115,6 +133,7 @@ int swap_readpage(struct file *file, struct page *page)
 
 	BUG_ON(!PageLocked(page));
 	ClearPageUptodate(page);
+	/*为I/O传输分配与初始化一个bio描述符*/
 	bio = get_swap_bio(GFP_KERNEL, page->private, page, end_swap_bio_read);
 	if (bio == NULL) {
 		unlock_page(page);
@@ -122,6 +141,7 @@ int swap_readpage(struct file *file, struct page *page)
 		goto out;
 	}
 	inc_page_state(pswpin);
+	/*向块设备子系统层发出I/O请求*/
 	submit_bio(READ, bio);
 out:
 	return ret;

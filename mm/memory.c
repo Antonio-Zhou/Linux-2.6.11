@@ -1656,6 +1656,7 @@ void swapin_readahead(swp_entry_t entry, unsigned long addr,struct vm_area_struc
 	num = valid_swaphandles(entry, &offset);
 	for (i = 0; i < num; offset++, i++) {
 		/* Ok, do the async read-ahead now */
+		/*每个页的读入  mm/swap_state.c*/
 		new_page = read_swap_cache_async(swp_entry(swp_type(entry),
 							   offset), vma, addr);
 		if (!new_page)
@@ -1690,21 +1691,54 @@ void swapin_readahead(swp_entry_t entry, unsigned long addr,struct vm_area_struc
  * We hold the mm semaphore and the page_table_lock on entry and
  * should release the pagetable lock on exit..
  */
+
+/*
+ * 换入所需的页
+ * 参数:struct mm_struct * mm---引起缺页异常的进程的内存描述符地址
+ * 	struct vm_area_struct * vma---address所在的线性区的线性区描述符地址
+ * 	unsigned long address---引起异常的线性地址
+ * 	pte_t *page_table---映射address的页表项的地址
+ * 	pmd_t *pmd---映射address的中间目录的地址
+ * 	pte_t orig_pte---映射address的页表项的内容
+ * 	int write_access---一个标志，表示试图执行的访问是读还是写
+ * 从不返回0
+ * 1(次错误)---页已经在交换高速缓存中
+ * 2(主错误)---页已经从交换区读入
+ * -1---在进行换入时发生错误
+ * */
 static int do_swap_page(struct mm_struct * mm,
 	struct vm_area_struct * vma, unsigned long address,
 	pte_t *page_table, pmd_t *pmd, pte_t orig_pte, int write_access)
 {
 	struct page *page;
+	/*获得换出页标识符*/
 	swp_entry_t entry = pte_to_swp_entry(orig_pte);
 	pte_t pte;
 	int ret = VM_FAULT_MINOR;
 
+	/*
+	 * 释放任何页表的临时内核映射
+	 * 该页表由handle_mm_fault()建立，访问高端内存需要进行内核映射
+	 * */
 	pte_unmap(page_table);
+	/*由调用者函数handle_pte_fault()获取*/
 	spin_unlock(&mm->page_table_lock);
+	/*检查交换高速缓存是否已经含有换出页标识符对应的页*/
 	page = lookup_swap_cache(entry);
 	if (!page) {
+		/*
+		 * 从交换区读取至多有2n个页的一组页，其中包括所请求的页
+		 * n存放在page_cluster，通常==3,可以通过/proc/sys/vm/page-cluster修改
+		 * n == 0--->可以禁止提前换入页
+		 * */
  		swapin_readahead(entry, address, vma);
+		/*
+		 * 换入由引起缺页异常的进程所访问的那一页
+		 * 这一步的理由:
+		 * 	swapin_readahead()可能在读取请求页时失败，
+		 * */
  		page = read_swap_cache_async(entry, vma, address);
+		/*请求的页还是没有被加到交换高速缓存，另一内核路径可能已经代表这个进程的一个子进程换入了说请求的页*/
 		if (!page) {
 			/*
 			 * Back out if somebody else faulted in this pte while
@@ -1712,6 +1746,7 @@ static int do_swap_page(struct mm_struct * mm,
 			 */
 			spin_lock(&mm->page_table_lock);
 			page_table = pte_offset_map(pmd, address);
+			/*比较page_table和orig_pte,若有差异，说明这一页已经被某个其他的内核路径换入*/
 			if (likely(pte_same(*page_table, orig_pte)))
 				ret = VM_FAULT_OOM;
 			else
@@ -1724,6 +1759,7 @@ static int do_swap_page(struct mm_struct * mm,
 		/* Had to read the page from swap area: Major fault */
 		ret = VM_FAULT_MAJOR;
 		inc_page_state(pgmajfault);
+		/*页已被换入，函数试图获得一个交换标记*/
 		grab_swap_token();
 	}
 
@@ -1736,6 +1772,7 @@ static int do_swap_page(struct mm_struct * mm,
 	 */
 	spin_lock(&mm->page_table_lock);
 	page_table = pte_offset_map(pmd, address);
+	/*检查另一个内核路径是否代表这个进程的一个子进程换入了所请求的页*/
 	if (unlikely(!pte_same(*page_table, orig_pte))) {
 		pte_unmap(page_table);
 		spin_unlock(&mm->page_table_lock);
@@ -1747,14 +1784,18 @@ static int do_swap_page(struct mm_struct * mm,
 
 	/* The page isn't present yet, go ahead with the fault. */
 		
+	/*减少entry对应的页槽的引用计数器*/
 	swap_free(entry);
+	/*检查交换高速缓存是否至少占满50%  include/linux/swap.h*/
 	if (vm_swap_full())
+		/*检查页是否仅被引起异常的进程(或其一个子进程)拥有，若是，则从交换高速缓存中删去这一页*/
 		remove_exclusive_swap_page(page);
 
 	mm->rss++;
 	acct_update_integrals();
 	update_mem_hiwater();
 
+	/*更新页表项以便进程能找到这一页*/
 	pte = mk_pte(page, vma->vm_page_prot);
 	if (write_access && can_share_swap_page(page)) {
 		pte = maybe_mkwrite(pte_mkdirty(pte), vma);
@@ -1764,9 +1805,11 @@ static int do_swap_page(struct mm_struct * mm,
 
 	flush_icache_page(vma, page);
 	set_pte(page_table, pte);
+	/*把匿名页插入面向对象的反向映射数据结构*/
 	page_add_anon_rmap(page, vma, address);
 
 	if (write_access) {
+		/*复制一份页框*/
 		if (do_wp_page(mm, vma, address,
 				page_table, pmd, pte) == VM_FAULT_OOM)
 			ret = VM_FAULT_OOM;

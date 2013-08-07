@@ -438,6 +438,11 @@ int remove_exclusive_swap_page(struct page *page)
  * Free the swap entry like above, but also try to
  * free the page cache entry if it is the last user.
  */
+
+/*
+ * 释放一个交换表项，并检查该表项引用的页是否在交换高速缓存。
+ * 如果没有用户态进程(除了当前进程)引用该页，或者超过50%的交换表项在用，则从交换高速缓存中释放该页 
+ * */
 void free_swap_and_cache(swp_entry_t entry)
 {
 	struct swap_info_struct * p;
