@@ -81,10 +81,7 @@ VM_MASK		= 0x00020000
 #define resume_kernel		restore_all
 #endif
 
-/*
- * 在栈中保存中断处理程序可能会使用的所有CPU寄存器
- * eflags,cs,eip,ss,esp 除外
- * */
+/*在栈中保存中断处理程序可能会使用的所有CPU寄存器,eflags,cs,eip,ss,esp 除外*/
 #define SAVE_ALL \
 	cld; \
 	pushl %es; \
@@ -493,8 +490,8 @@ debug_stack_correct:
  * check whether we got an NMI on the debug path where the debug
  * fault happened on the sysenter path.
  */
- 
-/*一旦每个时钟节拍到来,所有CPU,不管其正在做什么,都开始执行NMI中断处理程序*/
+
+ /*一旦每个时钟节拍到来,所有CPU,不管其正在做什么,都开始执行NMI中断处理程序*/
 ENTRY(nmi)
 	cmpl $sysenter_entry,(%esp)
 	je nmi_stack_fixup
@@ -743,7 +740,7 @@ ENTRY(sys_call_table)
 	.long sys_getdents
 	.long sys_select
 	.long sys_flock
-	.long sys_msync		/*把属于共享内存映射的脏页刷新到磁盘*/
+	.long sys_msync
 	.long sys_readv		/* 145 */
 	.long sys_writev
 	.long sys_getsid
@@ -818,7 +815,7 @@ ENTRY(sys_call_table)
 	.long sys_setfsgid
 	.long sys_pivot_root
 	.long sys_mincore
-	.long sys_madvise	/*调整filemap_nopage()函数的预读行为*/
+	.long sys_madvise
 	.long sys_getdents64	/* 220 */
 	.long sys_fcntl64
 	.long sys_ni_syscall	/* reserved for TUX */
@@ -844,10 +841,10 @@ ENTRY(sys_call_table)
 	.long sys_sched_getaffinity
 	.long sys_set_thread_area
 	.long sys_get_thread_area
-	.long sys_io_setup	/* 245 */	/*为调用进程新建一个新的AIO环境*/
-	.long sys_io_destroy			/*删除AIO环境，还删除包含有AIO环的匿名线性区*/
+	.long sys_io_setup	/* 245 */
+	.long sys_io_destroy
 	.long sys_io_getevents
-	.long sys_io_submit			/*开始异步I/O操作*/
+	.long sys_io_submit
 	.long sys_io_cancel
 	.long sys_fadvise64	/* 250 */
 	.long sys_ni_syscall

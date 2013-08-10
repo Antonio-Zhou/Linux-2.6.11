@@ -80,18 +80,18 @@ fastcall int handle_IRQ_event(unsigned int irq, struct pt_regs *regs,
 {
 	int ret, retval = 0, status = 0;
 
-/*SA_INTERRUPT±»Çå0,ÓÃstiÖ¸Áî¼¤»î±¾µØÖĞ¶Ï*/
+	/*SA_INTERRUPTè¢«æ¸…0,ç”¨stiæŒ‡ä»¤æ¿€æ´»æœ¬åœ°ä¸­æ–­*/
 	if (!(action->flags & SA_INTERRUPT))
 		local_irq_enable();
 
-/*Ö´ĞĞÃ¿¸öÖĞ¶ÏµÄÖĞ¶Ï·şÎñÀı³Ì*/
+	/*æ‰§è¡Œæ¯ä¸ªä¸­æ–­çš„ä¸­æ–­æœåŠ¡ä¾‹ç¨‹*/
 	do {
 		/*
-		*	ÖĞ¶Ï·şÎñÀı³Ì²ÎÊı:	irq---IRQºÅ
-		*								dev_id---Éè±¸±êÊ¶·û
-		*								regs---Ö¸ÏòÄÚºËÕ»µÄpt_regs½á¹¹µÄÖ¸Õë
-		*										Õ»ÖĞº¬ÓĞÖĞ¶Ï·¢ÉúºóËæ¼´±£´æµÄ¼Ä´æÆ÷
-		*/
+		 * ä¸­æ–­æœåŠ¡ä¾‹ç¨‹å‚æ•°:
+		 * 	irq---IRQå·
+		 * 	dev_id---è®¾å¤‡æ ‡è¯†ç¬¦
+		 * 	regs---æŒ‡å‘å†…æ ¸æ ˆçš„pt_regsç»“æ„çš„æŒ‡é’ˆ,æ ˆä¸­å«æœ‰ä¸­æ–­å‘ç”Ÿåéšå³ä¿å­˜çš„å¯„å­˜å™¨
+		 * */
 		ret = action->handler(irq, action->dev_id, regs);
 		if (ret == IRQ_HANDLED)
 			status |= action->flags;
@@ -103,7 +103,7 @@ fastcall int handle_IRQ_event(unsigned int irq, struct pt_regs *regs,
 		add_interrupt_randomness(irq);
 	local_irq_disable();
 	
-/*Èç¹ûÃ»ÓĞÓëÖĞ¶Ï¶ÔÓ¦µÄÖĞ¶Ï·şÎñÀı³Ì·µ»Ø0,·ñÔò·µ»Ø1*/
+	/*å¦‚æœæ²¡æœ‰ä¸ä¸­æ–­å¯¹åº”çš„ä¸­æ–­æœåŠ¡ä¾‹ç¨‹è¿”å›0,å¦åˆ™è¿”å›1*/
 	return retval;
 }
 
@@ -112,11 +112,12 @@ fastcall int handle_IRQ_event(unsigned int irq, struct pt_regs *regs,
  * SMP cross-CPU interrupts have their own specific
  * handlers).
  */
- /*
-*	²ÎÊı:  unsigned int irq---IRQºÅ,Í¨¹ıeax¼Ä´æÆ÷ 
-*			struct pt_regs *regs---Ö¸Ïòpt_regsµÄÖ¸Õë,Í¨¹ıedx¼Ä´æÆ÷,ÓÃ»§¼Ä´æÆ÷µÄÖµÒÑ¾­´æÔÚÆäÖĞ
-*	__do_IRQÊÇÒÔ½ûÖ¹±¾µØÖĞ¶ÏÔËĞĞµÄ.
-*/
+
+/*
+ * å‚æ•°:unsigned int irq---IRQå·,é€šè¿‡eaxå¯„å­˜å™¨
+ * 	struct pt_regs *regs---æŒ‡å‘pt_regsçš„æŒ‡é’ˆ,é€šè¿‡edxå¯„å­˜å™¨,ç”¨æˆ·å¯„å­˜å™¨çš„å€¼å·²ç»å­˜åœ¨å…¶ä¸­
+ * å‡½æ•°æ˜¯ä»¥ç¦æ­¢æœ¬åœ°ä¸­æ–­è¿è¡Œçš„.
+ * */
 fastcall unsigned int __do_IRQ(unsigned int irq, struct pt_regs *regs)
 {
 	irq_desc_t *desc = irq_desc + irq;

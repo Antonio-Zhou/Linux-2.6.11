@@ -148,12 +148,12 @@ void __lockfunc _write_lock_bh(rwlock_t *lock)
 EXPORT_SYMBOL(_write_lock_bh);
 
 /*
-*	ÔÚinclude/linux/spinlock.hÖĞµ÷ÓÃ
-*	¾ßÓĞÄÚºËÇÀÕ¼µÄspin_lock
-*/
+ * åœ¨include/linux/spinlock.hä¸­è°ƒç”¨
+ * å…·æœ‰å†…æ ¸æŠ¢å çš„spin_lock
+ * */
 void __lockfunc _spin_lock(spinlock_t *lock)
 {
-	/*½ûÓÃÄÚºËÇÀÕ¼*/
+	/*ç¦ç”¨å†…æ ¸æŠ¢å */
 	preempt_disable();
 	_raw_spin_lock(lock);
 }

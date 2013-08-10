@@ -561,6 +561,10 @@ repeat:
  *
  *	Allocates a new inode for given superblock.
  */
+
+/*
+ * 分配一个新的VFS索引节点对象
+ * */
 struct inode *new_inode(struct super_block *sb)
 {
 	static unsigned long last_ino;

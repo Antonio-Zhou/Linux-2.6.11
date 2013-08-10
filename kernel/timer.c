@@ -66,27 +66,21 @@ typedef struct tvec_root_s {
 struct tvec_t_base_s {
 	spinlock_t lock;
 	/*
-	*	ĞèÒª¼ì²éµÄ¶¯Ì¬¶¨Ê±Æ÷µÄ×îÔçµ½ÆÚÊ±¼ä,
-	*	Èç¹ûtimer_jiffies == jiffies,ËµÃ÷¿ÉÑÓ³Ùº¯ÊıÃ»ÓĞ»ıÑ¹
-	*	Èç¹ûtimer_jiffies < jiffies,ËµÃ÷Ç°¼¸¸ö½ÚÅÄÏà¹ØµÄ¿ÉÑÓ³Ùº¯Êı±ØĞë´¦Àí
-	*	ÏµÍ³Æô¶¯Ê±,timer_jiffies == jiffies,ÇÒÖ»ÄÜÓÉrun_timer_softirq()Ôö¼Ó
-	*/
+	 * éœ€è¦æ£€æŸ¥çš„åŠ¨æ€å®šæ—¶å™¨çš„æœ€æ—©åˆ°æœŸæ—¶é—´,
+	 * 	timer_jiffies == jiffies--->å¯å»¶è¿Ÿå‡½æ•°æ²¡æœ‰ç§¯å‹
+	 * 	timer_jiffies < jiffies--->å‰å‡ ä¸ªèŠ‚æ‹ç›¸å…³çš„å¯å»¶è¿Ÿå‡½æ•°å¿…é¡»å¤„ç†
+	 * ç³»ç»Ÿå¯åŠ¨æ—¶,timer_jiffies == jiffies,ä¸”åªèƒ½ç”±run_timer_softirq()å¢åŠ 
+	 * */
 	unsigned long timer_jiffies;
-	/*SMPÖĞ,Ö¸ÏòÓÉ±¾µØCPUµ±Ç°Õı´¦Àí¶¯Ì¬¶¨Ê±Æ÷µÄtimer_listÊı¾İ½á¹¹*/
+	/*SMPä¸­,æŒ‡å‘ç”±æœ¬åœ°CPUå½“å‰æ­£å¤„ç†åŠ¨æ€å®šæ—¶å™¨çš„timer_listæ•°æ®ç»“æ„*/
 	struct timer_list *running_timer;
-	/*
-	*	°üº¬Ò»¸övecÊı×é,ÓÉ256¸ölist_headÔªËØ×é³É(256¸ö¶¯Ì¬¶¨Ê±Æ÷Á´±í×é³É)
-	*	Õâ¸ö½á¹¹°üº¬ÁËÔÚ½ô½Ó×Åµ½À´µÄ255¸ö½ÚÅÄÄÚ½«Òªµ½ÆÚµÄËùÓĞ¶¯Ì¬¶¨Ê±Æ÷
-	*/
+	/*åŒ…å«ä¸€ä¸ªvecæ•°ç»„,ç”±256ä¸ªlist_headå…ƒç´ ç»„æˆ(256ä¸ªåŠ¨æ€å®šæ—¶å™¨é“¾è¡¨ç»„æˆ),è¿™ä¸ªç»“æ„åŒ…å«äº†åœ¨ç´§æ¥ç€åˆ°æ¥çš„255ä¸ªèŠ‚æ‹å†…å°†è¦åˆ°æœŸçš„æ‰€æœ‰åŠ¨æ€å®šæ—¶å™¨*/
 	tvec_root_t tv1;
-	/*tv2,tv3,tv4°üº¬ÔÚ½ô½Ó×Åµ½À´µÄ2^14-1,2^20-1,2^26-1¸ö½ÚÅÄÄÚ½«Òªµ½ÆÚµÄËùÓĞ¶¯Ì¬¶¨Ê±Æ÷*/
+	/*tv2,tv3,tv4åŒ…å«åœ¨ç´§æ¥ç€åˆ°æ¥çš„2^14-1,2^20-1,2^26-1ä¸ªèŠ‚æ‹å†…å°†è¦åˆ°æœŸçš„æ‰€æœ‰åŠ¨æ€å®šæ—¶å™¨*/
 	tvec_t tv2;
 	tvec_t tv3;
 	tvec_t tv4;
-	/*
-	*	ÓëÇ°ÃæµÄÇø±ğ,vecÊı×é×îºóÒ»ÏîÊÇÒ»¸ö´óµÄexpires×Ö¶ÎÖµµÄ¶¯Ì¬¶¨Ê±Æ÷Á´±í.
-	*	²»ĞèÒª´ÓÆäËûÊı×é²¹³ä,
-	*/
+	/*ä¸å‰é¢çš„åŒºåˆ«,vecæ•°ç»„æœ€åä¸€é¡¹æ˜¯ä¸€ä¸ªå¤§çš„expireså­—æ®µå€¼çš„åŠ¨æ€å®šæ—¶å™¨é“¾è¡¨.ä¸éœ€è¦ä»å…¶ä»–æ•°ç»„è¡¥å……*/
 	tvec_t tv5;
 } ____cacheline_aligned_in_smp;
 
@@ -358,10 +352,9 @@ EXPORT_SYMBOL(del_timer);
  */
 
 /*
-*	´ÓÁ´±íÖĞÉ¾³ı¶¨Ê±Æ÷,È»ºó¼ì²é¶¨Ê±Æ÷º¯ÊıÊÇ·ñ»¹ÔÚÆäËûCPUÉÏÔËĞĞ,
-*	Èç¹ûÊÇ,¸Ãº¯ÊıµÈ´ı,Ö±µ½¶¨Ê±Æ÷º¯Êı½áÊø
-*	Òª¿¼ÂÇ¶¨Ê±Æ÷º¯ÊıÖØĞÂ¼¤»î×Ô¼º
-*/
+ * ä»é“¾è¡¨ä¸­åˆ é™¤å®šæ—¶å™¨,ç„¶åæ£€æŸ¥å®šæ—¶å™¨å‡½æ•°æ˜¯å¦è¿˜åœ¨å…¶ä»–CPUä¸Šè¿è¡Œ,å¦‚æœæ˜¯,è¯¥å‡½æ•°ç­‰å¾…,ç›´åˆ°å®šæ—¶å™¨å‡½æ•°ç»“æŸ
+ * è¦è€ƒè™‘å®šæ—¶å™¨å‡½æ•°é‡æ–°æ¿€æ´»è‡ªå·±
+ * */
 int del_timer_sync(struct timer_list *timer)
 {
 	tvec_base_t *base;
@@ -408,9 +401,8 @@ EXPORT_SYMBOL(del_timer_sync);
  */
 
 /*
-*	Èç¹û¶¨Ê±Æ÷º¯Êı²»ÖØĞÂ¼¤»î¶¨Ê±Æ÷,
-*	Ê¹ÓÃ¸Ãº¯ÊıÊ¹¶¨Ê±Æ÷ÎŞĞ§,²¢µÈ´ıÖ±µ½¶¨Ê±Æ÷º¯Êı½áÊø
-*/
+ * å¦‚æœå®šæ—¶å™¨å‡½æ•°ä¸é‡æ–°æ¿€æ´»å®šæ—¶å™¨,ä½¿ç”¨è¯¥å‡½æ•°ä½¿å®šæ—¶å™¨æ— æ•ˆ,å¹¶ç­‰å¾…ç›´åˆ°å®šæ—¶å™¨å‡½æ•°ç»“æŸ
+ * */
 int del_singleshot_timer_sync(struct timer_list *timer)
 {
 	int ret = del_timer(timer);
@@ -426,11 +418,11 @@ EXPORT_SYMBOL(del_singleshot_timer_sync);
 #endif
 
 /*
-*	¹ıÂË¶¨Ê±Æ÷
-*	²ÎÊı:	tvec_base_t *base: baseµØÖ·
-*			tvec_t *tv: base->tv(2-4)µÄµØÖ·
-*			int index:	base->tv(2-4)ÖĞÁ´±íµÄË÷ÒıÖµ(°üÀ¨ÔÚ½ô½Ó×Åµ½À´µÄ256¸ö½ÚÅÄÄÚ½«Òªµ½ÆÚµÄ¶¨Ê±Æ÷)
-*/
+ * è¿‡æ»¤å®šæ—¶å™¨
+ * å‚æ•°:tvec_base_t *base---baseåœ°å€
+ * 	tvec_t *tv---base->tv(2-4)çš„åœ°å€
+ * 	int index---base->tv(2-4)ä¸­é“¾è¡¨çš„ç´¢å¼•å€¼(åŒ…æ‹¬åœ¨ç´§æ¥ç€åˆ°æ¥çš„256ä¸ªèŠ‚æ‹å†…å°†è¦åˆ°æœŸçš„å®šæ—¶å™¨)
+ * */
 static int cascade(tvec_base_t *base, tvec_t *tv, int index)
 {
 	/* cascade all the timers from tv up one level */
@@ -468,29 +460,23 @@ static inline void __run_timers(tvec_base_t *base)
 {
 	struct timer_list *timer;
 
-	/*»ñµÃbase->lock×ÔĞıËø²¢½ûÖ¹±¾µØÖĞ¶Ï*/
+	/*è·å¾—base->lockè‡ªæ—‹é”å¹¶ç¦æ­¢æœ¬åœ°ä¸­æ–­*/
 	spin_lock_irq(&base->lock);
-	/*
-	*	base->timer_jiffies > jiffiesÊ±Í£Ö¹
-	*	Ò»°ãÇé¿öÏÂ,¸ÃÑ­»·»áÁ¬ĞøÖ´ĞĞjiffies-base->timer_jiffies+1´Î
-	*/
+	/*base->timer_jiffies > jiffiesæ—¶åœæ­¢.ä¸€èˆ¬æƒ…å†µä¸‹,è¯¥å¾ªç¯ä¼šè¿ç»­æ‰§è¡Œjiffies-base->timer_jiffies+1æ¬¡*/
 	while (time_after_eq(jiffies, base->timer_jiffies)) {
 		struct list_head work_list = LIST_HEAD_INIT(work_list);
 		struct list_head *head = &work_list;
-		/*
-		*	¼ÆËãbase->tv1ÖĞÁ´±íµÄË÷Òı
-		*	¸ÃË÷Òı±£Áô×ÅÏÂÒ»´ÎÒª´¦ÀíµÄ¶¨Ê±Æ÷
-		*	TVR_MASK = 1111 1111
-		*/
+		/*è®¡ç®—base->tv1ä¸­é“¾è¡¨çš„ç´¢å¼•,è¯¥ç´¢å¼•ä¿ç•™ç€ä¸‹ä¸€æ¬¡è¦å¤„ç†çš„å®šæ—¶å™¨,TVR_MASK == 1111 1111*/
  		int index = base->timer_jiffies & TVR_MASK;
  
 		/*
 		 * Cascade timers:
 		 */
+
 		 /*
-		 *	Èôindex == 0 ËµÃ÷base->tv1ÖĞËùÓĞÁ´±íÒÑ¾­±»¼ì²é¹ı
-		 *	µ÷ÓÃcascade()¹ıÂË¶¯Ì¬¶¨Ê±Æ÷
-		*/
+		  * index == 0--->base->tv1ä¸­æ‰€æœ‰é“¾è¡¨å·²ç»è¢«æ£€æŸ¥è¿‡
+		  * cascade()--->è¿‡æ»¤åŠ¨æ€å®šæ—¶å™¨
+		  * */
 		if (!index &&
 			(!cascade(base, &base->tv2, INDEX(0))) &&
 				(!cascade(base, &base->tv3, INDEX(1))) &&
@@ -499,7 +485,7 @@ static inline void __run_timers(tvec_base_t *base)
 		++base->timer_jiffies; 
 		list_splice_init(base->tv1.vec + index, &work_list);
 repeat:
-	/*¶ÔÓÚbase->tv1.vec[index]Á´±íÉÏµÄÃ¿Ò»¸ö¶¨Ê±Æ÷,Ö´ĞĞËüËù¶ÔÓ¦µÄ¶¨Ê±Æ÷º¯Êı*/
+		/*å¯¹äºbase->tv1.vec[index]é“¾è¡¨ä¸Šçš„æ¯ä¸€ä¸ªå®šæ—¶å™¨,æ‰§è¡Œå®ƒæ‰€å¯¹åº”çš„å®šæ—¶å™¨å‡½æ•°*/
 		if (!list_empty(head)) {
 			void (*fn)(unsigned long);
 			unsigned long data;
@@ -508,9 +494,9 @@ repeat:
  			fn = timer->function;
  			data = timer->data;
 
-			/*½«t´Óbase->tv1µÄÁ´±íÉÏÉ¾³ı*/
+			/*å°†tä»base->tv1çš„é“¾è¡¨ä¸Šåˆ é™¤*/
 			list_del(&timer->entry);
-			/*SMPÖĞ,½«base->running_timerÉèÖÃÎª&t*/
+			/*SMPä¸­,å°†base->running_timerè®¾ç½®ä¸º&t*/
 			set_running_timer(base, timer);
 			smp_wmb();
 			timer->base = NULL;
@@ -527,10 +513,7 @@ repeat:
 			goto repeat;
 		}
 	}
-	/*
-	*	ËùÓĞµ½ÆÚµÄ¶¨Ê±Æ÷ÒÑ¾­±»´¦ÀíÁË.
-	*	SMPÖĞ,base->running_timer==NULL
-	*/
+	/*æ‰€æœ‰åˆ°æœŸçš„å®šæ—¶å™¨å·²ç»è¢«å¤„ç†äº†.SMPä¸­,base->running_timer == NULL*/
 	set_running_timer(base, NULL);
 	spin_unlock_irq(&base->lock);
 }
@@ -866,26 +849,28 @@ static void update_wall_time(unsigned long ticks)
  */
 
 /*
-*	¸üĞÂÒ»Ğ©ÄÚºËÍ³¼ÆÊı
-*	µ¥´¦ÀíÆ÷È«¾ÖÖĞ¶Ï´¦Àí³ÌĞò»ò¶à´¦ÀíÆ÷ÏµÍ³ÉÏµÄ±¾µØÊ±ÖÓÖĞ¶Ï´¦Àí³ÌĞòµ÷ÓÃ
-*/
+ * æ›´æ–°ä¸€äº›å†…æ ¸ç»Ÿè®¡æ•°,å•å¤„ç†å™¨å…¨å±€ä¸­æ–­å¤„ç†ç¨‹åºæˆ–å¤šå¤„ç†å™¨ç³»ç»Ÿä¸Šçš„æœ¬åœ°æ—¶é’Ÿä¸­æ–­å¤„ç†ç¨‹åºè°ƒç”¨
+ * */
 void update_process_times(int user_tick)
 {
 	struct task_struct *p = current;
 	int cpu = smp_processor_id();
 
 	/* Note: this timer irq context must be accounted for as well. */
-	/*¼ì²éµ±Ç°½ø³ÌÔËĞĞÁË¶à³¤Ê±¼ä*/
-	if (user_tick)	/*Ê±ÖÓÖĞ¶Ï·¢ÉúÊ±ÊÇÓÃ»§Ì¬*/
+
+	/*æ£€æŸ¥å½“å‰è¿›ç¨‹è¿è¡Œäº†å¤šé•¿æ—¶é—´*/
+	/*æ—¶é’Ÿä¸­æ–­å‘ç”Ÿæ—¶æ˜¯ç”¨æˆ·æ€*/
+	if (user_tick)
 		account_user_time(p, jiffies_to_cputime(1));
-	else		/*Ê±ÖÓÖĞ¶Ï·¢ÉúÊ±ÊÇÄÚºËÌ¬*/
+	/*æ—¶é’Ÿä¸­æ–­å‘ç”Ÿæ—¶æ˜¯å†…æ ¸æ€*/
+	else
 		account_system_time(p, HARDIRQ_OFFSET, jiffies_to_cputime(1));
-	/*µ÷ÓÃraise_softirq(),¼¤»î±¾µØCPUÉÏµÄTIMER_SOFTIRQÈÎÎñ¶ÓÁĞ*/
+	/*è°ƒç”¨raise_softirq(),æ¿€æ´»æœ¬åœ°CPUä¸Šçš„TIMER_SOFTIRQä»»åŠ¡é˜Ÿåˆ—*/
 	run_local_timers();
-	/*ÅĞ¶ÏÊÇ·ñ±ØĞë»ØÊÕÒ»Ğ©ÀÏ°æ±¾µÄ,ÊÜRCU±£»¤µÄÊı¾İ½á¹¹*/
+	/*åˆ¤æ–­æ˜¯å¦å¿…é¡»å›æ”¶ä¸€äº›è€ç‰ˆæœ¬çš„,å—RCUä¿æŠ¤çš„æ•°æ®ç»“æ„*/
 	if (rcu_pending(cpu))
 		rcu_check_callbacks(cpu, user_tick);
-	/*Ê¹µ±Ç°½ø³ÌµÄÊ±¼äÆ¬¼ÆÊıÆ÷¼õ1,²¢¼ì²é¼ÆÊıÆ÷ÊÇ·ñÒÑ¼õµ½0*/
+	/*ä½¿å½“å‰è¿›ç¨‹çš„æ—¶é—´ç‰‡è®¡æ•°å™¨å‡1,å¹¶æ£€æŸ¥è®¡æ•°å™¨æ˜¯å¦å·²å‡åˆ°0*/
 	scheduler_tick();
 }
 
@@ -943,13 +928,12 @@ EXPORT_SYMBOL(xtime_lock);
  * This function runs timers and the timer-tq in bottom half context.
  */
  
- /*
- *	ÓëTIMER_SOFTIRQÏà¹ØµÄ¿ÉÑÓ³Ùº¯Êı
- *	Èí¶¨Ê±Æ÷µÄ´¦Àí
-*/
+/*
+ * ä¸TIMER_SOFTIRQç›¸å…³çš„å¯å»¶è¿Ÿå‡½æ•°,è½¯å®šæ—¶å™¨çš„å¤„ç†
+ * */
 static void run_timer_softirq(struct softirq_action *h)
 {
-	/*°Ñ±¾µØCPUÏà¹ØµÄtvec_basesÊı¾İ½á¹¹*/
+	/*æŠŠæœ¬åœ°CPUç›¸å…³çš„tvec_basesæ•°æ®ç»“æ„*/
 	tvec_base_t *base = &__get_cpu_var(tvec_bases);
 
 	if (time_after_eq(jiffies, base->timer_jiffies))
@@ -968,33 +952,26 @@ void run_local_timers(void)
  * Called by the timer interrupt. xtime_lock must already be taken
  * by the timer IRQ!
  */
- /*
- *	¸üĞÂxtime±äÁ¿µÄÖµ
- *	ÓÃ»§³ÌĞò´ÓxtimeÖĞ»ñµÃµ±Ç°Ê±¼äºÍÈÕÆÚ,
- *	ÄÚºËÖÜÆÚĞÔµÄ¸üĞÂ¸Ã±äÁ¿,²ÅÄÜÊ¹ËüµÄÖµ±£³ÖÏàµ±µÄ¾«È·
- *	´ËÊ±ÒÑ¾­»ñµÃĞ´²Ù×÷µÄxtime_lockË³ĞòËø
- */
+/*
+ * æ›´æ–°xtimeå˜é‡çš„å€¼
+ * ç”¨æˆ·ç¨‹åºä»xtimeä¸­è·å¾—å½“å‰æ—¶é—´å’Œæ—¥æœŸ,å†…æ ¸å‘¨æœŸæ€§çš„æ›´æ–°è¯¥å˜é‡,æ‰èƒ½ä½¿å®ƒçš„å€¼ä¿æŒç›¸å½“çš„ç²¾ç¡®,æ­¤æ—¶å·²ç»è·å¾—å†™æ“ä½œçš„xtime_locké¡ºåºé”
+ * */
 static inline void update_times(void)
 {
 	unsigned long ticks;
 
 	/*
-	*	wall_jiffies´æ·Åxtime×îºó¸üĞÂµÄÊ±¼ä
-	*	wall_jiffies¿ÉÒÔĞ¡ÓÚjiffies-1,ÒòÎªÒ»Ğ©¶¨Ê±Æ÷ÖĞ¶Ï»á¶ªÊ§
-	*	Ò²¾ÍÊÇ,ÄÚºË²»±ØÃ¿¸öÊ±ÖÓ½ÚÅÄ¸üĞÂxtime,µ«ÊÇ×îºó²»»áÓĞÊ±ÖÓ½ÚÅÄ¶ªÊ§
-	*	xtime×îÖÕ´æ·ÅÕıÈ·µÄÏµÍ³Ê±¼ä
-	*	¶Ô¶ªÊ§µÄ¶¨Ê±Æ÷ÖĞ¶ÏµÄ¼ì²éÔÚcur_timerµÄmark_offsetÖĞÍê³É
-	*/
+	 * wall_jiffies---xtimeæœ€åæ›´æ–°çš„æ—¶é—´
+	 * wall_jiffieså¯ä»¥å°äºjiffies-1,å› ä¸ºä¸€äº›å®šæ—¶å™¨ä¸­æ–­ä¼šä¸¢å¤±,ä¹Ÿå°±æ˜¯,å†…æ ¸ä¸å¿…æ¯ä¸ªæ—¶é’ŸèŠ‚æ‹æ›´æ–°xtime,ä½†æ˜¯æœ€åä¸ä¼šæœ‰æ—¶é’ŸèŠ‚æ‹ä¸¢å¤±
+	 * xtime---æœ€ç»ˆå­˜æ”¾æ­£ç¡®çš„ç³»ç»Ÿæ—¶é—´,å¯¹ä¸¢å¤±çš„å®šæ—¶å™¨ä¸­æ–­çš„æ£€æŸ¥åœ¨cur_timerçš„mark_offsetä¸­å®Œæˆ
+	 * */
 	ticks = jiffies - wall_jiffies;
 	if (ticks) {
 		wall_jiffies += ticks;
-		/*¸üĞÂxtime.tv_nsecºÍxtime.tv_sec*/
+		/*æ›´æ–°xtime.tv_nsecå’Œxtime.tv_sec*/
 		update_wall_time(ticks);
 	}
-	/*
-	*	¼ÆËã´¦ÓÚTASK_RUNNING»òTASK_UNINTERRUPTBLE×´Ì¬µÄ½ø³ÌÊı,
-	*	²¢ÓÃÕâ¸öÊı¾İ¸üĞÂÆ½¾ùÏµÍ³¸ºÔØ
-	*/
+	/*è®¡ç®—å¤„äºTASK_RUNNINGæˆ–TASK_UNINTERRUPTBLEçŠ¶æ€çš„è¿›ç¨‹æ•°,å¹¶ç”¨è¿™ä¸ªæ•°æ®æ›´æ–°å¹³å‡ç³»ç»Ÿè´Ÿè½½*/
 	calc_load(ticks);
 }
   
@@ -1007,7 +984,7 @@ static inline void update_times(void)
 void do_timer(struct pt_regs *regs)
 {
 	jiffies_64++;
-	/*¸üĞÂÏµÍ³ÈÕÆÚºÍÊ±¼ä,²¢¼ÆËãµ±Ç°ÏµÍ³¸ºÔØ*/
+	/*æ›´æ–°ç³»ç»Ÿæ—¥æœŸå’Œæ—¶é—´,å¹¶è®¡ç®—å½“å‰ç³»ç»Ÿè´Ÿè½½*/
 	update_times();
 }
 
@@ -1127,7 +1104,9 @@ asmlinkage long sys_getegid(void)
 
 #endif
 
-/*»½ĞÑ¹ÒÆğ½ø³Ì*/
+/*
+ * å”¤é†’æŒ‚èµ·è¿›ç¨‹
+ * */
 static void process_timeout(unsigned long __data)
 {
 	wake_up_process((task_t *)__data);
@@ -1174,7 +1153,9 @@ fastcall signed long __sched schedule_timeout(signed long timeout)
 		 * but I' d like to return a valid offset (>=0) to allow
 		 * the caller to do everything it want with the retval.
 		 */
-		schedule();	/*½ø³Ì¹ÒÆğÖ±µ½¶¨Ê±Æ÷µ½Ê±*/
+
+		/*è¿›ç¨‹æŒ‚èµ·ç›´åˆ°å®šæ—¶å™¨åˆ°æ—¶*/
+		schedule();
 		goto out;
 	default:
 		/*
@@ -1199,7 +1180,7 @@ fastcall signed long __sched schedule_timeout(signed long timeout)
 	init_timer(&timer);
 	timer.expires = expire;
 	timer.data = (unsigned long) current;
-	/*ÑÓÊ±µ½ÆÚ,»½ĞÑ¹ÒÆğ½ø³Ì*/
+	/*å»¶æ—¶åˆ°æœŸ,å”¤é†’æŒ‚èµ·è¿›ç¨‹*/
 	timer.function = process_timeout;
 
 	add_timer(&timer);
@@ -1210,9 +1191,9 @@ fastcall signed long __sched schedule_timeout(signed long timeout)
 
  out:
  	/*
- 	*	0:	ÑÓÊ±µ½ÆÚ
- 	*	timeout:	Èç¹û½ø³ÌÒòÄ³Ğ©Ô­Òò±»»½ĞÑ,µ½ÑÓÊ±µ½ÆÚÊ±»¹Ê£ÓàµÄ½ÚÅÄÊı
-	*/
+	 * 0---å»¶æ—¶åˆ°æœŸ
+	 * timeout---å¦‚æœè¿›ç¨‹å› æŸäº›åŸå› è¢«å”¤é†’,åˆ°å»¶æ—¶åˆ°æœŸæ—¶è¿˜å‰©ä½™çš„èŠ‚æ‹æ•°
+	 * */
 	return timeout < 0 ? 0 : timeout;
 }
 
@@ -1256,21 +1237,20 @@ asmlinkage long sys_nanosleep(struct timespec __user *rqtp, struct timespec __us
 	unsigned long expire;
 	long ret;
 
-	/*½«°üº¬ÔÚtimespec½á¹¹(ÓÃ»§Ì¬ÏÂ)ÖĞµÄÖµ¸´ÖÆµ½¾Ö²¿±äÁ¿tÖĞ.*/
+	/*å°†åŒ…å«åœ¨timespecç»“æ„(ç”¨æˆ·æ€ä¸‹)ä¸­çš„å€¼å¤åˆ¶åˆ°å±€éƒ¨å˜é‡tä¸­.*/
 	if (copy_from_user(&t, rqtp, sizeof(t)))
 		return -EFAULT;
 
 	if ((t.tv_nsec >= 1000000000L) || (t.tv_nsec < 0) || (t.tv_sec < 0))
 		return -EINVAL;
 
-	/*½«timespec½á¹¹ÖĞµÄÊ±¼ä¼ä¸ô×ª»»Îª½ÚÅÄÊı*/
+	/*å°†timespecç»“æ„ä¸­çš„æ—¶é—´é—´éš”è½¬æ¢ä¸ºèŠ‚æ‹æ•°*/
 	expire = timespec_to_jiffies(&t) + (t.tv_sec || t.tv_nsec);
 	current->state = TASK_INTERRUPTIBLE;
 	/*
-	*	½ø³ÌÑÓ³Ù
-	*	expire == 0:	½ø³ÌÑÓÊ±µ½ÆÚ,ÏµÍ³µ÷ÓÃ½áÊø
-	*	·ñÔò,ÏµÍ³µ÷ÓÃ×Ô¶¯ÖØĞÂÆô¶¯
-	*/
+	 * è¿›ç¨‹å»¶è¿Ÿ
+	 * expire == 0--->è¿›ç¨‹å»¶æ—¶åˆ°æœŸ,ç³»ç»Ÿè°ƒç”¨ç»“æŸ,å¦åˆ™,ç³»ç»Ÿè°ƒç”¨è‡ªåŠ¨é‡æ–°å¯åŠ¨
+	 * */
 	expire = schedule_timeout(expire);
 
 	ret = 0;

@@ -19,7 +19,7 @@ int do_getitimer(int which, struct itimerval *value)
 	register unsigned long val;
 
 	switch (which) {
-		/*ÕæÕı¹ıÈ¥µÄÊ±¼ä,½ø³Ì½ÓÊÕSIGALRMĞÅºÅ*/
+	/*çœŸæ­£è¿‡å»çš„æ—¶é—´,è¿›ç¨‹æ¥æ”¶SIGALRMä¿¡å·*/
 	case ITIMER_REAL:
 		val = 0;
 		/* 
@@ -35,12 +35,12 @@ int do_getitimer(int which, struct itimerval *value)
 		jiffies_to_timeval(val, &value->it_value);
 		jiffies_to_timeval(current->it_real_incr, &value->it_interval);
 		break;
-		/*½ø³ÌÔÚÓÃ»§Ì¬ÏÂ»¨·ÑµÄÊ±¼ä,½ÓÊÕSIGVTALRMĞÅºÅ*/
+	/*è¿›ç¨‹åœ¨ç”¨æˆ·æ€ä¸‹èŠ±è´¹çš„æ—¶é—´,æ¥æ”¶SIGVTALRMä¿¡å·*/
 	case ITIMER_VIRTUAL:
 		cputime_to_timeval(current->it_virt_value, &value->it_value);
 		cputime_to_timeval(current->it_virt_incr, &value->it_interval);
 		break;
-		/*½ø³Ì¼ÈÔÚÓÃ»§Ì¬ÏÂÓÖÔÚÄÚºËÌ¬ÏÂ»¨·ÑµÄÊ±¼ä,½ÓÊÕSIGPROFĞÅºÅ*/
+	/*è¿›ç¨‹æ—¢åœ¨ç”¨æˆ·æ€ä¸‹åˆåœ¨å†…æ ¸æ€ä¸‹èŠ±è´¹çš„æ—¶é—´,æ¥æ”¶SIGPROFä¿¡å·*/
 	case ITIMER_PROF:
 		cputime_to_timeval(current->it_prof_value, &value->it_value);
 		cputime_to_timeval(current->it_prof_incr, &value->it_interval);
@@ -90,7 +90,7 @@ int do_setitimer(int which, struct itimerval *value, struct itimerval *ovalue)
 	if (ovalue && (k = do_getitimer(which, ovalue)) < 0)
 		return k;
 	switch (which) {
-		/*ÀûÓÃ¶¯Ì¬¶¨Ê±Æ÷ÊµÏÖ*/
+		/*åˆ©ç”¨åŠ¨æ€å®šæ—¶å™¨å®ç°*/
 		case ITIMER_REAL:
 			del_timer_sync(&current->real_timer);
 			expire = timeval_to_jiffies(&value->it_value);
@@ -133,10 +133,9 @@ int do_setitimer(int which, struct itimerval *value, struct itimerval *ovalue)
  */
 
 /*
-*	²ÎÊı:	struct itimerval __user *value---Ö¸¶¨ÁË¶¨Ê±Æ÷³õÊ¶µÄ³ÖĞøÊ±¼ä,
-*										ÒÔ¼°¶¨Ê±Æ÷±»×Ô¶¯ÖØĞÂ¼¤»îºóÊ¹ÓÃµÄ³ÖĞøÊ±¼ä(¶ÔÓÚÒ»´ÎĞÔÖ´ĞĞµÄ¶¨Ê±Æ÷¶øÑÔÎª0)
-*			struct itimerval __user *ovalue---ÏµÍ³µ÷ÓÃ½«ÏÈÇ°¶¨Ê±Æ÷µÄ²ÎÊıÌî³äµ½¸Ã½á¹¹ÖĞ
-*/
+ * å‚æ•°:struct itimerval __user *value---æŒ‡å®šäº†å®šæ—¶å™¨åˆè¯†çš„æŒç»­æ—¶é—´,ä»¥åŠå®šæ—¶å™¨è¢«è‡ªåŠ¨é‡æ–°æ¿€æ´»åä½¿ç”¨çš„æŒç»­æ—¶é—´(å¯¹äºä¸€æ¬¡æ€§æ‰§è¡Œçš„å®šæ—¶å™¨è€Œè¨€ä¸º0)
+ * 	struct itimerval __user *ovalue---ç³»ç»Ÿè°ƒç”¨å°†å…ˆå‰å®šæ—¶å™¨çš„å‚æ•°å¡«å……åˆ°è¯¥ç»“æ„ä¸­
+ * */
 asmlinkage long sys_setitimer(int which,
 			      struct itimerval __user *value,
 			      struct itimerval __user *ovalue)

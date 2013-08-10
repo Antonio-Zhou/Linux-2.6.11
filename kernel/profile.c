@@ -380,10 +380,10 @@ void profile_hit(int type, void *__pc)
 #endif /* !CONFIG_SMP */
 
 /*
-*	为代码监管器采集数据
-*	单处理器系统---do_timer_interrupt()调用(全局时钟中断处理程序)
-*	多处理器系统---smp_local_timer_interrupt()调用(本地时钟中断处理程序)
-*/
+ * 涓轰唬鐮佺洃绠″櫒閲囬泦鏁版嵁
+ * 鍗曞鐞嗗櫒绯荤粺---do_timer_interrupt()璋冪敤(鍏ㄥ眬鏃堕挓涓柇澶勭悊绋嬪簭)
+ * 澶氬鐞嗗櫒绯荤粺---smp_local_timer_interrupt()璋冪敤(鏈湴鏃堕挓涓柇澶勭悊绋嬪簭)
+ * */
 void profile_tick(int type, struct pt_regs *regs)
 {
 	if (type == CPU_PROFILING && timer_hook)

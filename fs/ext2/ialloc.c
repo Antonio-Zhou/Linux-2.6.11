@@ -269,6 +269,9 @@ static int find_group_dir(struct super_block *sb, struct inode *parent)
 #define INODE_COST 64
 #define BLOCK_COST 256
 
+/*
+ * 为目录找到一个合适的块组
+ * */
 static int find_group_orlov(struct super_block *sb, struct inode *parent)
 {
 	int parent_group = EXT2_I(parent)->i_block_group;
@@ -446,6 +449,13 @@ found:
 	return group;
 }
 
+/*
+ * 创建磁盘索引节点
+ * 返回相应的索引节点对象的地址(失败时为NULL)
+ * 该函数谨慎的选择存放该新索引节点的组，它将无联系的目录散放在不同的组，而且同时把王建存放在父目录的同一组.
+ * 参数:struct inode *dir---一个目录对应的索引节点对象的地址，新创建的索引节点必须插入到这个目录中
+ * 	int mode---要创建的索引节点的类型
+ * */
 struct inode *ext2_new_inode(struct inode *dir, int mode)
 {
 	struct super_block *sb;
@@ -461,17 +471,20 @@ struct inode *ext2_new_inode(struct inode *dir, int mode)
 	int err;
 
 	sb = dir->i_sb;
-	inode = new_inode(sb);
+	/*分配一个新的VFS索引节点对象，并把它的i_sb = &dir->i_sb  fs/inode.c*/
+	inod = new_inode(sb);
 	if (!inode)
 		return ERR_PTR(-ENOMEM);
 
 	ei = EXT2_I(inode);
 	sbi = EXT2_SB(sb);
 	es = sbi->s_es;
+	/*新索引节点是一个目录*/
 	if (S_ISDIR(mode)) {
 		if (test_opt(sb, OLDALLOC))
 			group = find_group_dir(sb, dir);
 		else
+			/*为目录找到一个合适的块组*/
 			group = find_group_orlov(sb, dir);
 	} else 
 		group = find_group_other(sb, dir);

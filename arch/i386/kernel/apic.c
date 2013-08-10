@@ -71,7 +71,8 @@ void __init apic_intr_init(void)
 	smp_intr_init();
 #endif
 	/* self generated IPI for local APIC timer */
-	/*ÉèÖÃIDTµÄÖĞ¶ÏÃÅ*/
+
+	/*è®¾ç½®IDTçš„ä¸­æ–­é—¨*/
 	set_intr_gate(LOCAL_TIMER_VECTOR, apic_timer_interrupt);
 
 	/* IPI vectors for APIC spurious and error interrupts */
@@ -932,10 +933,9 @@ void __setup_APIC_LVTT(unsigned int clocks)
 }
 
 /*
-*	calibrate_APIC_clock()¼ÆËã³öÀ´µÄÈ·ÇĞÖµ±»ÓÃÀ´¶Ô±¾µØËùÓĞAPIC±à³Ì,
-*	²¢ÓÉ´ËÔÚÃ¿¸ö½ÚÅÄ²úÉúÒ»´Î±¾µØÊ±ÖÓÖĞ¶Ï
-*	¸Ãº¯Êı±»ÏµÍ³ÖĞµÄÃ¿¸öCPUÖ´ĞĞÒ»´Î
-*/
+ * calibrate_APIC_clock()è®¡ç®—å‡ºæ¥çš„ç¡®åˆ‡å€¼è¢«ç”¨æ¥å¯¹æœ¬åœ°æ‰€æœ‰APICç¼–ç¨‹,å¹¶ç”±æ­¤åœ¨æ¯ä¸ªèŠ‚æ‹äº§ç”Ÿä¸€æ¬¡æœ¬åœ°æ—¶é’Ÿä¸­æ–­
+ * è¯¥å‡½æ•°è¢«ç³»ç»Ÿä¸­çš„æ¯ä¸ªCPUæ‰§è¡Œä¸€æ¬¡
+ * */
 static void __init setup_APIC_timer(unsigned int clocks)
 {
 	unsigned long flags;
@@ -966,10 +966,9 @@ static void __init setup_APIC_timer(unsigned int clocks)
  */
 
 /*
-*	Í¨¹ıÕıÔÚÆô¶¯µÄCPUµÄ±¾µØAPICÀ´¼ÆËãÔÚÒ»¸ö½ÚÅÄÄÚÊÕµ½¶àÉÙ¸ö×ÜÏßÊ±ÖÓĞÅºÅ
-*	ËùÓĞ±¾µØAPIC¶¨Ê±Æ÷¶¼ÊÇÍ¬²½µÄ,ÒòÎªËüÃÇ¶¼»ùÓÚ¹«¹²×ÜÏßÊ±ÖÓĞÅºÅ
-*	Òò´Ëcalibrate_APIC_clock()¼ÆËã³öÀ´µÄÖµ¶ÔÏµÍ³ÖĞÆäËûCPUÍ¬ÑùÓĞĞ§
-*/
+ * é€šè¿‡æ­£åœ¨å¯åŠ¨çš„CPUçš„æœ¬åœ°APICæ¥è®¡ç®—åœ¨ä¸€ä¸ªèŠ‚æ‹å†…æ”¶åˆ°å¤šå°‘ä¸ªæ€»çº¿æ—¶é’Ÿä¿¡å·,
+ * æ‰€æœ‰æœ¬åœ°APICå®šæ—¶å™¨éƒ½æ˜¯åŒæ­¥çš„,å› ä¸ºå®ƒä»¬éƒ½åŸºäºå…¬å…±æ€»çº¿æ—¶é’Ÿä¿¡å·,å› æ­¤calibrate_APIC_clock()è®¡ç®—å‡ºæ¥çš„å€¼å¯¹ç³»ç»Ÿä¸­å…¶ä»–CPUåŒæ ·æœ‰æ•ˆ
+ * */
 int __init calibrate_APIC_clock(void)
 {
 	unsigned long long t1 = 0, t2 = 0;
@@ -1144,7 +1143,7 @@ inline void smp_local_timer_interrupt(struct pt_regs * regs)
 		}
 
 #ifdef CONFIG_SMP
-		/*¼ì²éµ±Ç°½ø³ÌÔËĞĞµÄÊ±¼ä²¢¸üĞÂÒ»Ğ©±¾µØCPUÍ³¼ÆÊı*/
+		/*æ£€æŸ¥å½“å‰è¿›ç¨‹è¿è¡Œçš„æ—¶é—´å¹¶æ›´æ–°ä¸€äº›æœ¬åœ°CPUç»Ÿè®¡æ•°*/
 		update_process_times(user_mode(regs));
 #endif
 	}
@@ -1170,10 +1169,12 @@ inline void smp_local_timer_interrupt(struct pt_regs * regs)
  *   interrupt as well. Thus we cannot inline the local irq ... ]
  */
 
-/*¸ß¼¶ÖĞ¶Ï´¦Àí³ÌĞò*/
+/*
+ * é«˜çº§ä¸­æ–­å¤„ç†ç¨‹åº
+ * */
 fastcall void smp_apic_timer_interrupt(struct pt_regs *regs)
 {
-	/*»ñµÃCPUÂß¼­ºÅ*/
+	/*è·å¾—CPUé€»è¾‘å·*/
 	int cpu = smp_processor_id();
 
 	/*
@@ -1186,7 +1187,7 @@ fastcall void smp_apic_timer_interrupt(struct pt_regs *regs)
 	 * NOTE! We'd better ACK the irq immediately,
 	 * because timer handling can be slow.
 	 */
-	 /*Ó¦´ğ±¾µØAPICÖĞ¶Ï*/
+	 /*åº”ç­”æœ¬åœ°APICä¸­æ–­*/
 	ack_APIC_irq();
 	/*
 	 * update_process_times() expects us to have done irq_enter().

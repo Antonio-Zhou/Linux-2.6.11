@@ -41,7 +41,7 @@ irq_cpustat_t irq_stat[NR_CPUS] ____cacheline_aligned;
 EXPORT_SYMBOL(irq_stat);
 #endif
 
-/*Ò»¸öÈíÖĞ¶ÏµÄÓÅÏÈ¼¶ÊÇÏàÓ¦µÄÔªËØÔÚÊı×éÄÚµÄÏÂ±êsoftirq_action*/
+/*ä¸€ä¸ªè½¯ä¸­æ–­çš„ä¼˜å…ˆçº§æ˜¯ç›¸åº”çš„å…ƒç´ åœ¨æ•°ç»„å†…çš„ä¸‹æ ‡softirq_action*/
 static struct softirq_action softirq_vec[32] __cacheline_aligned_in_smp;
 
 static DEFINE_PER_CPU(struct task_struct *, ksoftirqd);
@@ -72,37 +72,38 @@ static inline void wakeup_softirqd(void)
  */
 #define MAX_SOFTIRQ_RESTART 10
 
-/*¶ÁÈ¡±¾µØCPUµÄÈíÖĞ¶ÏÑÚÂë²¢Ö´ĞĞÓëÃ¿¸öÉèÖÃÎ»Ïà¹ØµÄ¿ÉÑÓ³Ùº¯Êı*/
+/*
+ * è¯»å–æœ¬åœ°CPUçš„è½¯ä¸­æ–­æ©ç å¹¶æ‰§è¡Œä¸æ¯ä¸ªè®¾ç½®ä½ç›¸å…³çš„å¯å»¶è¿Ÿå‡½æ•°
+ * */
 asmlinkage void __do_softirq(void)
 {
 	struct softirq_action *h;
 	__u32 pending;
-	/*±ÜÃâ¹ı³¤Ê±¼äµÄÑÓ³ÙÓÃ»§Ì¬½ø³ÌµÄÖ´ĞĞ*/
+	/*é¿å…è¿‡é•¿æ—¶é—´çš„å»¶è¿Ÿç”¨æˆ·æ€è¿›ç¨‹çš„æ‰§è¡Œ*/
 	int max_restart = MAX_SOFTIRQ_RESTART;
 	int cpu;
 
-	/*°Ñ±¾µØCPUÈíÖĞ¶ÏµÄÎ»ÑÚÂë¸´ÖÆµ½¾Ö²¿±äÁ¿pending*/
+	/*æŠŠæœ¬åœ°CPUè½¯ä¸­æ–­çš„ä½æ©ç å¤åˆ¶åˆ°å±€éƒ¨å˜é‡pending*/
 	pending = local_softirq_pending();
 
 	/*
-	*	Ôö¼ÓÈí¼şÖĞ¶Ï¼ÆÊıÆ÷µÄÖµ
-	*	¿ÉÑÓ³Ùº¯ÊıÊÇÔÚ¿ªÖĞ¶ÏÏÂÔËĞĞµÄ,´ËÊ±¿ÉÄÜ»áÓĞĞÂµÄÖĞ¶Ï²úÉú,Ó¦±ÜÃâÕâÖÖÇé¿ö
-	*	ÒòÎª¿ÉÑÓ³Ùº¯ÊıÊÇ´®ĞĞÖ´ĞĞµÄ.
-	*	Òò´Ë__do_softirq()µÄµÚÒ»¸öÊµÀı½ûÓÃ¿ÉÑÓ³Ùº¯Êı,ÒÔ±ãÃ¿¸öĞÂµÄº¯ÊıÊµÀı½«»áÔÚdo_softirq()µÄµÚÒ»²½¾ÍÍË³ö
-	*/
+	 * å¢åŠ è½¯ä»¶ä¸­æ–­è®¡æ•°å™¨çš„å€¼,å¯å»¶è¿Ÿå‡½æ•°æ˜¯åœ¨å¼€ä¸­æ–­ä¸‹è¿è¡Œçš„,æ­¤æ—¶å¯èƒ½ä¼šæœ‰æ–°çš„ä¸­æ–­äº§ç”Ÿ,åº”é¿å…è¿™ç§æƒ…å†µ
+	 * å› ä¸ºå¯å»¶è¿Ÿå‡½æ•°æ˜¯ä¸²è¡Œæ‰§è¡Œçš„.å› æ­¤__do_softirq()çš„ç¬¬ä¸€ä¸ªå®ä¾‹ç¦ç”¨å¯å»¶è¿Ÿå‡½æ•°,ä»¥ä¾¿æ¯ä¸ªæ–°çš„å‡½æ•°å®ä¾‹å°†ä¼šåœ¨do_softirq()çš„ç¬¬ä¸€æ­¥å°±é€€å‡º
+	 * */
 	local_bh_disable();
 	cpu = smp_processor_id();
 restart:
 	/* Reset the pending bitmask before enabling irqs */
-	/*Çå³ı±¾µØCPUµÄÈíÖĞ¶ÏÎ»Í¼,ÒÔ±ã¼¤»îĞÂµÄÈíÖĞ¶Ï*/
+
+	/*æ¸…é™¤æœ¬åœ°CPUçš„è½¯ä¸­æ–­ä½å›¾,ä»¥ä¾¿æ¿€æ´»æ–°çš„è½¯ä¸­æ–­*/
 	local_softirq_pending() = 0;
 
-	/*¼¤»î±¾µØÖĞ¶Ï*/
+	/*æ¿€æ´»æœ¬åœ°ä¸­æ–­*/
 	local_irq_enable();
 
 	h = softirq_vec;
 
-	/*¸ù¾İpendingµÄÃ¿Ò»Î»ÉèÖÃ,Ö´ĞĞ¶ÔÓ¦µÄÈíÖĞ¶Ï´¦Àíº¯Êı*/
+	/*æ ¹æ®pendingçš„æ¯ä¸€ä½è®¾ç½®,æ‰§è¡Œå¯¹åº”çš„è½¯ä¸­æ–­å¤„ç†å‡½æ•°*/
 	do {
 		if (pending & 1) {
 			h->action(h);
@@ -112,23 +113,23 @@ restart:
 		pending >>= 1;
 	} while (pending);
 
-	/*½ûÓÃ±¾µØÖĞ¶Ï*/
+	/*ç¦ç”¨æœ¬åœ°ä¸­æ–­*/
 	local_irq_disable();
 
 	pending = local_softirq_pending();
 
 	/*
-	*	pending !=  0´Ó×îºóÒ»´ÎÑ­»·¿ªÊ¼,ÖÁÉÙÓĞÒ»¸öÈíÖĞ¶Ï±»¼¤»î
-	*	Ñ­»·¼ÆÊıÈÔÊÇÕıÊı
-	*/
+	 * pending !=  0ä»æœ€åä¸€æ¬¡å¾ªç¯å¼€å§‹,è‡³å°‘æœ‰ä¸€ä¸ªè½¯ä¸­æ–­è¢«æ¿€æ´»
+	 * å¾ªç¯è®¡æ•°ä»æ˜¯æ­£æ•°
+	 * */
 	if (pending && --max_restart)
 		goto restart;
 
-	/*Ñ­»·½áÊøºó»¹ÓĞ¹ÒÆğÈíÖĞ¶Ï,Ôòµ÷ÓÃwakeup_softirqd()*/
+	/*å¾ªç¯ç»“æŸåè¿˜æœ‰æŒ‚èµ·è½¯ä¸­æ–­,åˆ™è°ƒç”¨wakeup_softirqd()*/
 	if (pending)
 		wakeup_softirqd();
 	
-	/*ÈíÖĞ¶Ï¼ÆÊıÆ÷¼õ1,Òò¶øÖØĞÂ¼¤»î¿ÉÑÓ³Ùº¯Êı*/
+	/*è½¯ä¸­æ–­è®¡æ•°å™¨å‡1,å› è€Œé‡æ–°æ¿€æ´»å¯å»¶è¿Ÿå‡½æ•°*/
 	__local_bh_enable();
 }
 
@@ -138,10 +139,7 @@ asmlinkage void do_softirq(void)
 {
 	__u32 pending;
 	unsigned long flags;
-	/*
-	*	ÒªÃ´ÒÑ¾­ÔÚÖĞ¶ÏÉÏÏÂÎÄÖĞµ÷ÓÃÁËdo_softirq(),
-	*	ÒªÃ´µ±Ç°½ûÓÃÁËÈíÖĞ¶Ï
-	*/
+	/*è¦ä¹ˆå·²ç»åœ¨ä¸­æ–­ä¸Šä¸‹æ–‡ä¸­è°ƒç”¨äº†do_softirq(),è¦ä¹ˆå½“å‰ç¦ç”¨äº†è½¯ä¸­æ–­*/
 	if (in_interrupt())
 		return;
 	
@@ -166,21 +164,16 @@ void local_bh_enable(void)
 	 * Keep preemption disabled until we are done with
 	 * softirq processing:
  	 */
- 	 /*µİ¼õÈíÖĞ¶Ï¼ÆÊıÆ÷*/
+	
+ 	 /*é€’å‡è½¯ä¸­æ–­è®¡æ•°å™¨*/
  	sub_preempt_count(SOFTIRQ_OFFSET - 1);
 
-	/*
-	*	¼ì²é±¾µØCPUµÄpreempt_count×Ö¶ÎÖĞÓ²ÖĞ¶Ï¼ÆÊıÆ÷ºÍÈíÖĞ¶Ï¼ÆÊıÆ÷
-	*	Èç¹ûÁ½¸ö¼ÆÊıÆ÷µÄÖµ¶¼µÈÓÚ0,¶øÇÒÓÒ¹ÒÆğµÄÈíÖĞ¶ÏÒªÖ´ĞĞ
-	*/
+	/*æ£€æŸ¥æœ¬åœ°CPUçš„preempt_countå­—æ®µä¸­ç¡¬ä¸­æ–­è®¡æ•°å™¨å’Œè½¯ä¸­æ–­è®¡æ•°å™¨,å¦‚æœä¸¤ä¸ªè®¡æ•°å™¨çš„å€¼éƒ½ç­‰äº0,è€Œä¸”å³æŒ‚èµ·çš„è½¯ä¸­æ–­è¦æ‰§è¡Œ*/
 	if (unlikely(!in_interrupt() && local_softirq_pending()))
 		do_softirq();
 
 	dec_preempt_count();
-	/*
-	*	¼ì²é±¾µØCPU µÄTIF_NEED_RESCHEDÊÇ·ñ±»ÉèÖÃ,
-	*	Èç¹ûÊÇ,ËµÃ÷½ø³ÌÇĞ»»ÇëÇóÊ±¹ÒÆğµÄ.
-	*/
+	/*æ£€æŸ¥æœ¬åœ°CPU çš„TIF_NEED_RESCHEDæ˜¯å¦è¢«è®¾ç½®,å¦‚æœæ˜¯,è¯´æ˜è¿›ç¨‹åˆ‡æ¢è¯·æ±‚æ—¶æŒ‚èµ·çš„.*/
 	preempt_check_resched();
 }
 EXPORT_SYMBOL(local_bh_enable);
@@ -194,7 +187,10 @@ EXPORT_SYMBOL(local_bh_enable);
 /*
  * Exit an interrupt context. Process softirqs if needed and possible:
  */
- /*µİ¼õÖĞ¶Ï¼ÆÊıÆ÷²¢¼ì²éÊÇ·ñÓĞ¿ÉÑÓ³Ùº¯ÊıÕıµÈ´ıÖ´ĞĞ*/
+
+/*
+ * é€’å‡ä¸­æ–­è®¡æ•°å™¨å¹¶æ£€æŸ¥æ˜¯å¦æœ‰å¯å»¶è¿Ÿå‡½æ•°æ­£ç­‰å¾…æ‰§è¡Œ
+ * */
 void irq_exit(void)
 {
 	account_system_vtime(current);
@@ -209,10 +205,7 @@ void irq_exit(void)
  */
 inline fastcall void raise_softirq_irqoff(unsigned int nr)
 {
-	/*	
-	*	°ÑÈíÖĞ¶Ï±ê¼ÇÎª¹ÒÆğ×´Ì¬,
-	*	ÕâÊÇÍ¨¹ıÉèÖÃ±¾µØCPUµÄÈíÖĞ¶ÏÑÚÂëÖĞÓëÏÂ±ênrÏà¹ØÎªÎ»À´ÊµÏÖµÄ
-	*/
+	/*æŠŠè½¯ä¸­æ–­æ ‡è®°ä¸ºæŒ‚èµ·çŠ¶æ€,è¿™æ˜¯é€šè¿‡è®¾ç½®æœ¬åœ°CPUçš„è½¯ä¸­æ–­æ©ç ä¸­ä¸ä¸‹æ ‡nrç›¸å…³ä¸ºä½æ¥å®ç°çš„*/
 	__raise_softirq_irqoff(nr);
 
 	/*
@@ -224,7 +217,8 @@ inline fastcall void raise_softirq_irqoff(unsigned int nr)
 	 * Otherwise we wake up ksoftirqd to make sure we
 	 * schedule the softirq soon.
 	 */
-	 /*Èç¹ûin_interrupt==1:ÒªÃ´ÒÑ¾­ÔÚÖĞ¶ÏÉÏÏÂÎÄÖĞµ÷ÓÃÁËraise_softirq(),ÒªÃ´µ±Ç°½ûÓÃÁËÈíÖĞ¶Ï*/
+
+	 /*å¦‚æœin_interrupt==1:è¦ä¹ˆå·²ç»åœ¨ä¸­æ–­ä¸Šä¸‹æ–‡ä¸­è°ƒç”¨äº†raise_softirq(),è¦ä¹ˆå½“å‰ç¦ç”¨äº†è½¯ä¸­æ–­*/
 	if (!in_interrupt())
 		wakeup_softirqd();
 }
@@ -232,9 +226,9 @@ inline fastcall void raise_softirq_irqoff(unsigned int nr)
 EXPORT_SYMBOL(raise_softirq_irqoff);
 
 /*
-*	¼¤»îÈíÖĞ¶Ï
-*	²ÎÊıÊÇÈíÖĞ¶ÏÏÂ±ênr
-*/
+ * æ¿€æ´»è½¯ä¸­æ–­
+ * å‚æ•°:unsigned int nr---è½¯ä¸­æ–­ä¸‹æ ‡nr
+ * */
 void fastcall raise_softirq(unsigned int nr)
 {
 	unsigned long flags;
@@ -245,11 +239,11 @@ void fastcall raise_softirq(unsigned int nr)
 }
 
 /*
-*	´¦ÀíÈíÖĞ¶ÏµÄ³õÊ¼»¯ÏŞÖÆ×Ô¼º³õÊ¼»¯ååsoftirq_vecÊı×éÖĞÊÊµ±µÄÔªËØ
-*	ÈíÖĞ¶ÏÏÂ±ê---
-*	Ö¸ÏòÒªÖ´ĞĞ·òÈËÈíÖĞ¶Ïº¯ÊıµÄÖ¸Õë
-*	Ö¸Ïò¿ÉÄÜÓÉÈíÖĞ¶Ïº¯ÊıÊ¹ÓÃµÄÊı¾İ½á¹¹µÄÖ¸Õë
-*/
+ * å¤„ç†è½¯ä¸­æ–­çš„åˆå§‹åŒ–é™åˆ¶è‡ªå·±åˆå§‹åŒ–é‚‹softirq_vecæ•°ç»„ä¸­é€‚å½“çš„å…ƒç´ 
+ * å‚æ•°:int nr---è½¯ä¸­æ–­ä¸‹æ ‡
+ * 	void (*action)(struct softirq_action*)---æŒ‡å‘è¦æ‰§è¡Œå¤«äººè½¯ä¸­æ–­å‡½æ•°çš„æŒ‡é’ˆ
+ * 	void *data---æŒ‡å‘å¯èƒ½ç”±è½¯ä¸­æ–­å‡½æ•°ä½¿ç”¨çš„æ•°æ®ç»“æ„çš„æŒ‡é’ˆ
+ * */
 void open_softirq(int nr, void (*action)(struct softirq_action*), void *data)
 {
 	softirq_vec[nr].data = data;
@@ -266,7 +260,8 @@ struct tasklet_head
 
 /* Some compilers disobey section attribute on statics when not
    initialized -- RR */
-   /*DEFINE_PER_CPUµÄ¶¨ÒåÃ»¿´¶®*******************************/
+
+/*DEFINE_PER_CPUçš„å®šä¹‰æ²¡çœ‹æ‡‚*******************************/
 static DEFINE_PER_CPU(struct tasklet_head, tasklet_vec) = { NULL };
 static DEFINE_PER_CPU(struct tasklet_head, tasklet_hi_vec) = { NULL };
 
@@ -275,13 +270,10 @@ void fastcall __tasklet_schedule(struct tasklet_struct *t)
 	unsigned long flags;
 
 	local_irq_save(flags);
-	/*ÏòÁ´±í¿ªÊ¼´¦Ôö¼ÓtaskletÃèÊö·û*/
+	/*å‘é“¾è¡¨å¼€å§‹å¤„å¢åŠ taskletæè¿°ç¬¦*/
 	t->next = __get_cpu_var(tasklet_vec).list;
 	__get_cpu_var(tasklet_vec).list = t;
-	/*
-	*	¼¤»îTASKLET_SOFTIRQÀàĞÍµÄÈíÖĞ¶Ï
-	*	raise_softirq_irqoff¼ÙÉèÒÑ¾­½ûÓÃÁË±¾µØÖĞ¶Ï
-	*/
+	/*æ¿€æ´»TASKLET_SOFTIRQç±»å‹çš„è½¯ä¸­æ–­,raise_softirq_irqoffå‡è®¾å·²ç»ç¦ç”¨äº†æœ¬åœ°ä¸­æ–­*/
 	raise_softirq_irqoff(TASKLET_SOFTIRQ);
 	local_irq_restore(flags);
 }
@@ -301,14 +293,16 @@ void fastcall __tasklet_hi_schedule(struct tasklet_struct *t)
 
 EXPORT_SYMBOL(__tasklet_hi_schedule);
 
-/*taskletÖ´ĞĞ*/
+/*
+ * taskletæ‰§è¡Œ
+ * */
 static void tasklet_action(struct softirq_action *a)
 {
 	struct tasklet_struct *list;
 
 	local_irq_disable();
 	list = __get_cpu_var(tasklet_vec).list;
-	/*ÒÑµ÷¶ÈµÄtaskletÃèÊö·ûÁ´±í±»Çå¿Õ*/
+	/*å·²è°ƒåº¦çš„taskletæè¿°ç¬¦é“¾è¡¨è¢«æ¸…ç©º*/
 	__get_cpu_var(tasklet_vec).list = NULL;
 	local_irq_enable();
 
@@ -404,13 +398,15 @@ void __init softirq_init(void)
 	open_softirq(HI_SOFTIRQ, tasklet_hi_action, NULL);
 }
 
-/*½â¾ö¸ßÆµÂÊµÄ¼¤»îÈíÖĞ¶ÏÎÊÌâ*/
+/*
+ * è§£å†³é«˜é¢‘ç‡çš„æ¿€æ´»è½¯ä¸­æ–­é—®é¢˜
+ * */
 static int ksoftirqd(void * __bind_cpu)
 {
 	set_user_nice(current, 19);
 	current->flags |= PF_NOFREEZE;
 
-	/*Ã»ÓĞ¹ÒÆğµÄÈíÖĞ¶Ï*/
+	/*æ²¡æœ‰æŒ‚èµ·çš„è½¯ä¸­æ–­*/
 	set_current_state(TASK_INTERRUPTIBLE);
 
 	while (!kthread_should_stop()) {
@@ -419,7 +415,7 @@ static int ksoftirqd(void * __bind_cpu)
 
 		__set_current_state(TASK_RUNNING);
 
-		/*½ø³Ì±»»½ĞÑÊ±£¬¾Í¼ì²élocal_softirq_pending()*/
+		/*è¿›ç¨‹è¢«å”¤é†’æ—¶ï¼Œå°±æ£€æŸ¥local_softirq_pending()*/
 		while (local_softirq_pending()) {
 			/* Preempt disable stops cpu going offline.
 			   If already offline, we'll be on wrong CPU:
@@ -429,7 +425,7 @@ static int ksoftirqd(void * __bind_cpu)
 				goto wait_to_die;
 			do_softirq();
 			preempt_enable();
-			/*½ø³ÌÇĞ»»*/
+			/*è¿›ç¨‹åˆ‡æ¢*/
 			cond_resched();
 		}
 

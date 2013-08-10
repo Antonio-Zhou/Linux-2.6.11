@@ -570,7 +570,9 @@ void getnstimeofday(struct timespec *tv)
 #endif
 
 #if (BITS_PER_LONG < 64)
-/* ¶ÁÈ¡jiffies_64µÄÖµ²¢·µ»Ø¸ÃÖµ*/
+/*
+ * è¯»å–jiffies_64çš„å€¼å¹¶è¿”å›žè¯¥å€¼
+ * */
 u64 get_jiffies_64(void)
 {
 	unsigned long seq;
@@ -578,9 +580,9 @@ u64 get_jiffies_64(void)
 
 	do {
 		/*
-		*	xtime_lockË³ÐòËøÓÃÀ´±£»¤64Î»µÄ¶Á²Ù×÷,
-		*	¸Ãº¯ÊýÒ»Ö±¶Ájiffies_64±äÁ¿ÖªµÀÈ·ÈÏ¸Ã±äÁ¿²¢Ã»ÓÐ±»ÆäËûÄÚºË¿ØÖÆÂ·¾¶¸üÐÂ²Å¶ÁÈ¡jiffies_64±äÁ¿
-		*/
+		 * xtime_locké¡ºåºé”ç”¨æ¥ä¿æŠ¤64ä½çš„è¯»æ“ä½œ,
+		 * è¯¥å‡½æ•°ä¸€ç›´è¯»jiffies_64å˜é‡çŸ¥é“ç¡®è®¤è¯¥å˜é‡å¹¶æ²¡æœ‰è¢«å…¶ä»–å†…æ ¸æŽ§åˆ¶è·¯å¾„æ›´æ–°æ‰è¯»å–jiffies_64å˜é‡
+		 * */
 		seq = read_seqbegin(&xtime_lock);
 		ret = jiffies_64;
 	} while (read_seqretry(&xtime_lock, seq));

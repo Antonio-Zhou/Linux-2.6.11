@@ -85,9 +85,8 @@ static int maxbatch = 10;
  */
 
 /*
-*	Ğ´Õßµ÷ÓÃ¸Ãº¯ÊıÀ´ÊÍ·ÅÊı¾İ½á¹¹µÄ¾É¸±±¾
-*	µ±ËùÓĞµÄCPU¶¼Í¨¹ı¾²Ö¹×´Ì¬Ö®ºó,call_rcu½ÓÊÜrcu_headÃèÊö·û
-*/
+ * å†™è€…è°ƒç”¨è¯¥å‡½æ•°æ¥é‡Šæ”¾æ•°æ®ç»“æ„çš„æ—§å‰¯æœ¬,å½“æ‰€æœ‰çš„CPUéƒ½é€šè¿‡é™æ­¢çŠ¶æ€ä¹‹å,call_rcuæ¥å—rcu_headæè¿°ç¬¦
+ * */
 void fastcall call_rcu(struct rcu_head *head,
 				void (*func)(struct rcu_head *rcu))
 {
@@ -366,9 +365,8 @@ static void rcu_process_callbacks(unsigned long unused)
 }
 
 /*
-*	¼ì²é±¾µØCPUÊÇ·ñ¾­ÀúÁË¾²Ö¹×´Ì¬
-*	²¢µ÷ÓÃtasklet_schedule()¼¤»î±¾µØCPUµÄrun_taskletÈÎÎñ¶ÓÁĞ
-*/
+ * æ£€æŸ¥æœ¬åœ°CPUæ˜¯å¦ç»å†äº†é™æ­¢çŠ¶æ€,å¹¶è°ƒç”¨tasklet_schedule()æ¿€æ´»æœ¬åœ°CPUçš„run_taskletä»»åŠ¡é˜Ÿåˆ—
+ * */
 void rcu_check_callbacks(int cpu, int user)
 {
 	if (user || 

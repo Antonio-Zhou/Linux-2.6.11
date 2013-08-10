@@ -164,19 +164,18 @@ struct init_timer_opts __initdata timer_pit_init = {
 	.opts = &timer_pit,
 };
 
-/*³õÊ¼»¯PIT*/
+/*
+ * åˆå§‹åŒ–PIT
+ * */
 void setup_pit_timer(void)
 {
 	extern spinlock_t i8253_lock;
 	unsigned long flags;
 
 	spin_lock_irqsave(&i8253_lock, flags);
-	/*
-	*	ÀàËÆÓÚoutb(),²»¹ıËü»áÍ¨¹ıÒ»¸ö¿Õ²Ù×÷¶ø²úÉúÒ»¸öÔİÍ£,±ÜÃâÓ²¼şÄÑÒÔ·Ö±æ
-	*	ÈÃPITÒÔĞÂµÄÆµÂÊ²úÉúÖĞ¶Ï
-	*/
+	/*ç±»ä¼¼äºoutb(),ä¸è¿‡å®ƒä¼šé€šè¿‡ä¸€ä¸ªç©ºæ“ä½œè€Œäº§ç”Ÿä¸€ä¸ªæš‚åœ,é¿å…ç¡¬ä»¶éš¾ä»¥åˆ†è¾¨,è®©PITä»¥æ–°çš„é¢‘ç‡äº§ç”Ÿä¸­æ–­*/
 	outb_p(0x34,PIT_MODE);		/* binary, mode 2, LSB/MSB, ch 0 */
-	/*²úÉúÒ»¸ö¸ü¶ÌµÄÑÓ³Ù*/
+	/*äº§ç”Ÿä¸€ä¸ªæ›´çŸ­çš„å»¶è¿Ÿ*/
 	udelay(10);
 	outb_p(LATCH & 0xff , PIT_CH0);	/* LSB */
 	udelay(10);

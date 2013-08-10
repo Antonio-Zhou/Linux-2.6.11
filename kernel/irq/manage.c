@@ -97,11 +97,10 @@ EXPORT_SYMBOL(disable_irq);
  *
  *	This function may be called from IRQ context.
  */
-/*
-*	¼ì²âÊÇ·ñ·¢ÉúÁËÖĞ¶Ï¶ªÊ§
-*	Èç¹û·¢ÉúÁË£¬¾ÍÇ¿ÆÈÈÃÓ²¼şÈÃ¶ªÊ§µÄÖĞ¶ÏÔÙ²úÉúÒ»´Î
-*/
 
+/*
+ * æ£€æµ‹æ˜¯å¦å‘ç”Ÿäº†ä¸­æ–­ä¸¢å¤±,å¦‚æœå‘ç”Ÿäº†ï¼Œå°±å¼ºè¿«è®©ç¡¬ä»¶è®©ä¸¢å¤±çš„ä¸­æ–­å†äº§ç”Ÿä¸€æ¬¡
+ * */
 void enable_irq(unsigned int irq)
 {
 	irq_desc_t *desc = irq_desc + irq;
@@ -117,9 +116,9 @@ void enable_irq(unsigned int irq)
 
 		desc->status = status;
 		if ((status & (IRQ_PENDING | IRQ_REPLAY)) == IRQ_PENDING) {
-			/*IRQ_REPLAYÈ·±£Ö»²úÉúÒ»¸ö×ÔÎÒÖĞ¶Ï*/
+			/*IRQ_REPLAYç¡®ä¿åªäº§ç”Ÿä¸€ä¸ªè‡ªæˆ‘ä¸­æ–­*/
 			desc->status = status | IRQ_REPLAY;
-			/*²úÉúÒ»¸öĞÂÖĞ¶Ï,Õâ¿ÉÒÔÍ¨¹ıÇ¿ÖÆ±¾µØAPIC²úÉúÒ»¸ö×ÔÎÒÖĞ¶ÏÀ´´ïµ½*/
+			/*äº§ç”Ÿä¸€ä¸ªæ–°ä¸­æ–­,è¿™å¯ä»¥é€šè¿‡å¼ºåˆ¶æœ¬åœ°APICäº§ç”Ÿä¸€ä¸ªè‡ªæˆ‘ä¸­æ–­æ¥è¾¾åˆ°*/
 			hw_resend_irq(desc->handler,irq);
 		}
 		desc->handler->enable(irq);
@@ -188,17 +187,19 @@ int setup_irq(unsigned int irq, struct irqaction * new)
 	 */
 	spin_lock_irqsave(&desc->lock,flags);
 	p = &desc->action;
-	/*¼ì²éÁíÒ»¸öÉè±¸ÊÇ·ñÒÑ¾­ÔÚÊ¹ÓÃirq*/
+	/*æ£€æŸ¥å¦ä¸€ä¸ªè®¾å¤‡æ˜¯å¦å·²ç»åœ¨ä½¿ç”¨irq*/
 	if ((old = *p) != NULL) {
 		/* Can't share interrupts unless both agree to */
-		/*¼ì²éÁ½¸öÉè±¸µÄirqactionÃèÊö·ûÖĞµÄSA_SHIRQÊÇ·ñ¶¼Ö¸¶¨ÁËIRQÏß±»¹²Ïí*/
+
+		/*æ£€æŸ¥ä¸¤ä¸ªè®¾å¤‡çš„irqactionæè¿°ç¬¦ä¸­çš„SA_SHIRQæ˜¯å¦éƒ½æŒ‡å®šäº†IRQçº¿è¢«å…±äº«*/
 		if (!(old->flags & new->flags & SA_SHIRQ)) {
 			spin_unlock_irqrestore(&desc->lock,flags);
 			return -EBUSY;
 		}
 
 		/* add new interrupt at end of irq queue */
-		/*°Ñ*new¼Óµ½ÓÉÁ´±íÄ©Î²*/
+
+		/*æŠŠ*newåŠ åˆ°ç”±é“¾è¡¨æœ«å°¾*/
 		do {
 			p = &old->next;
 			old = *p;
@@ -208,12 +209,12 @@ int setup_irq(unsigned int irq, struct irqaction * new)
 
 	*p = new;
 	
-	/*Ã»ÓĞÆäËûÉè±¸¹²ÏíÍ¬Ò»¸öIRQ,ÇåIRQ_DISABLED ,IRQ_AUTODETECT, IRQ_WAITING ,IRQ_INPROGRESS*/
+	/*æ²¡æœ‰å…¶ä»–è®¾å¤‡å…±äº«åŒä¸€ä¸ªIRQ,æ¸…IRQ_DISABLED ,IRQ_AUTODETECT, IRQ_WAITING ,IRQ_INPROGRESS*/
 	if (!shared) {
 		desc->depth = 0;
 		desc->status &= ~(IRQ_DISABLED | IRQ_AUTODETECT |
 				  IRQ_WAITING | IRQ_INPROGRESS);
-		/*È·±£¼¤»îIRQĞÅºÅ*/
+		/*ç¡®ä¿æ¿€æ´»IRQä¿¡å·*/
 		if (desc->handler->startup)
 			desc->handler->startup(irq);
 		else

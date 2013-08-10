@@ -134,6 +134,9 @@ static void ext2_put_super (struct super_block * sb)
 
 static kmem_cache_t * ext2_inode_cachep;
 
+/*
+ * alloc_inode的超级块方法
+ * */
 static struct inode *ext2_alloc_inode(struct super_block *sb)
 {
 	struct ext2_inode_info *ei;
@@ -547,6 +550,10 @@ static unsigned long descriptor_loc(struct super_block *sb,
 	return (first_data_block + has_super + (bg * sbi->s_blocks_per_group));
 }
 
+/*
+ * 内核安装Ext2文件系统时，函数为数据结构分配空间，并写入从磁盘读取的数据
+ * 函数返回后，分配的所有数据结构都保存在内存里。只有在Ext2文件系统卸载时才会被释放
+ * */
 static int ext2_fill_super(struct super_block *sb, void *data, int silent)
 {
 	struct buffer_head * bh;
@@ -563,6 +570,7 @@ static int ext2_fill_super(struct super_block *sb, void *data, int silent)
 	int i, j;
 	__le32 features;
 
+	/*分配一个ext2_sb_info描述符，将其地址当做参数传递并放在超级块的s_fs_info*/
 	sbi = kmalloc(sizeof(*sbi), GFP_KERNEL);
 	if (!sbi)
 		return -ENOMEM;
@@ -675,6 +683,7 @@ static int ext2_fill_super(struct super_block *sb, void *data, int silent)
 
 		logic_sb_block = (sb_block*BLOCK_SIZE) / blocksize;
 		offset = (sb_block*BLOCK_SIZE) % blocksize;
+		/*在缓冲区页中分配一个缓冲区和缓冲区首部*/
 		bh = sb_bread(sb, logic_sb_block);
 		if(!bh) {
 			printk("EXT2-fs: Couldn't read superblock on "
@@ -781,6 +790,7 @@ static int ext2_fill_super(struct super_block *sb, void *data, int silent)
 	percpu_counter_init(&sbi->s_freeinodes_counter);
 	percpu_counter_init(&sbi->s_dirs_counter);
 	bgl_lock_init(&sbi->s_blockgroup_lock);
+	/*分配一个字节数组，每组一个字节*/
 	sbi->s_debts = kmalloc(sbi->s_groups_count * sizeof(*sbi->s_debts),
 			       GFP_KERNEL);
 	if (!sbi->s_debts) {
@@ -788,8 +798,10 @@ static int ext2_fill_super(struct super_block *sb, void *data, int silent)
 		goto failed_mount_group_desc;
 	}
 	memset(sbi->s_debts, 0, sbi->s_groups_count * sizeof(*sbi->s_debts));
+	/*分配一个数组用于存放缓冲区首部指针，每个组描述一个*/
 	for (i = 0; i < db_count; i++) {
 		block = descriptor_loc(sb, logic_sb_block, i);
+		/*重复调用，分配缓冲区，从磁盘读入包含Ext2组描述符的块*/
 		sbi->s_group_desc[i] = sb_bread(sb, block);
 		if (!sbi->s_group_desc[i]) {
 			for (j = 0; j < i; j++)
