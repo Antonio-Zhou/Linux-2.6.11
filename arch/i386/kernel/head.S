@@ -378,10 +378,10 @@ rp_sidt:
 
 /* This is the default interrupt "handler" :-) */
 	ALIGN
-	/*Ó¦¸Ã´Ó²»±»Ö´ĞĞ*/
+	/*åº”è¯¥ä»ä¸è¢«æ‰§è¡Œ*/
 ignore_int:
 	cld
-		/* ±£´æ¼Ä´æÆ÷µÄÄÚÈİ*/
+		/* ä¿å­˜å¯„å­˜å™¨çš„å†…å®¹*/
 	pushl %eax
 	pushl %ecx
 	pushl %edx
@@ -395,16 +395,16 @@ ignore_int:
 	pushl 32(%esp)
 	pushl 40(%esp)
 	pushl $int_msg
-	/*´òÓ¡"Unkown Interrupt" ÏµÍ³ĞÅÏ¢*/
+	/*æ‰“å°"Unkown Interrupt" ç³»ç»Ÿä¿¡æ¯*/
 	call printk
 	addl $(5*4),%esp
-	/*»Ö¸´¼Ä´æÆ÷µÄÄÚÈİ*/
+	/*æ¢å¤å¯„å­˜å™¨çš„å†…å®¹*/
 	popl %ds
 	popl %es
 	popl %edx
 	popl %ecx
 	popl %eax
-	/*»Ö¸´±»ÖĞ¶ÏµÄ³ÌĞò*/
+	/*æ¢å¤è¢«ä¸­æ–­çš„ç¨‹åº*/
 	iret
 
 /*

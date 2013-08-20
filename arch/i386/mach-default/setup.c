@@ -82,10 +82,7 @@ static struct irqaction irq0  = { timer_interrupt, SA_INTERRUPT, CPU_MASK_NONE, 
  **/
 void __init time_init_hook(void)
 {
-	/*
-	*	´´½¨ÓëIRQ0ÏàÓ¦µÄÖĞ¶ÏÃÅ
-	*	IRQ0Òı½ÅÁ¬½Ó×ÅÏµÍ³Ê±ÖÓÖĞ¶ÏÔ´(PI»òHPET)
-	*/
+	/*åˆ›å»ºä¸IRQ0ç›¸åº”çš„ä¸­æ–­é—¨,IRQ0å¼•è„šè¿æ¥ç€ç³»ç»Ÿæ—¶é’Ÿä¸­æ–­æº(PIæˆ–HPET)*/
 	setup_irq(0, &irq0);
 }
 

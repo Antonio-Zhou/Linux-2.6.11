@@ -474,8 +474,8 @@ void flush_tlb_all(void)
  */
 
 /*
-*	²úÉúIPI,²¢Ç¿ÖÆÄ¿±êCPUÖØÐÂµ÷¶È
-*/
+ * äº§ç”ŸIPI,å¹¶å¼ºåˆ¶ç›®æ ‡CPUé‡æ–°è°ƒåº¦
+ * */
 void smp_send_reschedule(int cpu)
 {
 	send_IPI_mask(cpumask_of_cpu(cpu), RESCHEDULE_VECTOR);
@@ -589,9 +589,8 @@ fastcall void smp_reschedule_interrupt(struct pt_regs *regs)
 }
 
 /*
-*	IPIµÄ¸ß¼¶ÖÐ¶Ï´¦Àí³ÌÐò
-*		Ó¦´ð±¾µØAPICÉÏµÄ´¦ÀíÆ÷ÖÐ¶Ï,È»ºóÖ´ÐÐÓÉÖÐ¶Ï´¥·¢µÄÌØ¶¨²Ù×÷
-*/
+ * IPIçš„é«˜çº§ä¸­æ–­å¤„ç†ç¨‹åº,åº”ç­”æœ¬åœ°APICä¸Šçš„å¤„ç†å™¨ä¸­æ–­,ç„¶åŽæ‰§è¡Œç”±ä¸­æ–­è§¦å‘çš„ç‰¹å®šæ“ä½œ
+ * */
 fastcall void smp_call_function_interrupt(struct pt_regs *regs)
 {
 	void (*func) (void *info) = call_data->func;

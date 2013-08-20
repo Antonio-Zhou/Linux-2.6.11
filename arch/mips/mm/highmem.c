@@ -4,8 +4,8 @@
 #include <asm/tlbflush.h>
 
 /*
-*	½¨Á¢ÓÀ¾ÃÄÚºËÓ³Éä
-*/
+ * å»ºç«‹æ°¸ä¹…å†…æ ¸æ˜ å°„
+ * */
 void *__kmap(struct page *page)
 {
 	void *addr;
@@ -20,8 +20,8 @@ void *__kmap(struct page *page)
 }
 
 /*
-*	³·Ïúkamp()½¨Á¢µÄÓÀ¾ÃÄÚºËÓ³Éä
-*/
+ * æ’¤é”€kamp()å»ºç«‹çš„æ°¸ä¹…å†…æ ¸æ˜ å°„
+ * */
 void __kunmap(struct page *page)
 {
 	if (in_interrupt())
@@ -41,8 +41,8 @@ void __kunmap(struct page *page)
  */
 
 /*
-*	½¨Á¢ÁÙÊ±ÄÚºËÓ³Éä
-*/
+ * å»ºç«‹ä¸´æ—¶å†…æ ¸æ˜ å°„
+ * */
 void *__kmap_atomic(struct page *page, enum km_type type)
 {
 	enum fixed_addresses idx;
@@ -53,7 +53,7 @@ void *__kmap_atomic(struct page *page, enum km_type type)
 	if (!PageHighMem(page))
 		return page_address(page);
 
-	/*typeºÍsmp_processor_id()Ö¸¶¨±ØĞëÊ¹ÓÃÄÄ¸ö¹Ì¶¨Ó³ÉäµÄÏßĞÔµØÖ·Ó³ÉäÇëÇóÒ³*/
+	/*typeå’Œsmp_processor_id()æŒ‡å®šå¿…é¡»ä½¿ç”¨å“ªä¸ªå›ºå®šæ˜ å°„çš„çº¿æ€§åœ°å€æ˜ å°„è¯·æ±‚é¡µ*/
 	idx = type + KM_TYPE_NR*smp_processor_id();
 	vaddr = __fix_to_virt(FIX_KMAP_BEGIN + idx);
 #ifdef CONFIG_DEBUG_HIGHMEM
@@ -61,7 +61,7 @@ void *__kmap_atomic(struct page *page, enum km_type type)
 		BUG();
 #endif
 	set_pte(kmap_pte-idx, mk_pte(page, kmap_prot));
-	/*Ë¢ĞÂÊÊµ±µÄTLBÏî*/
+	/*åˆ·æ–°é€‚å½“çš„TLBé¡¹*/
 	local_flush_tlb_one((unsigned long)vaddr);
 
 	return (void*) vaddr;

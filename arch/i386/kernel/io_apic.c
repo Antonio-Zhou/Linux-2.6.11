@@ -222,12 +222,11 @@ static void clear_IO_APIC (void)
 }
 
 /*
-*	ÊµÏÖCPUµÄIRQÇ×ºÍÁ¦:ĞŞ¸ÄI/O APIC µÄÖĞ¶ÏÖØ¶¨Ïò±í±íÏî.
-*	¿ÉÒÔ°ÑÖĞ¶ÏĞÅºÅ·¢ËÍµ½Ä³¸öÌØ¶¨µÄCPUÉÏ
-*	²ÎÊı:	unsigned int irq---±»ÖØ¶¨ÏòµÄIRQÏòÁ¿
-*			cpumask_t cpumask---32Î»ÑÚÂë(±íÊ¾¿ÉÒÔ½ÓÊÕÕâ¸öIRQµÄCPU)
-*	/proc/irq/n/smp_affinity(nÊÇÖĞ¶ÏÏòÁ¿)---¸Ä±äÖ¸¶¨ÖĞ¶ÏIRQµÄÇ×ºÍÁ¦
-*/
+ * å®ç°CPUçš„IRQäº²å’ŒåŠ›:ä¿®æ”¹I/O APIC çš„ä¸­æ–­é‡å®šå‘è¡¨è¡¨é¡¹.å¯ä»¥æŠŠä¸­æ–­ä¿¡å·å‘é€åˆ°æŸä¸ªç‰¹å®šçš„CPUä¸Š
+ * å‚æ•°:unsigned int irq---è¢«é‡å®šå‘çš„IRQå‘é‡
+ * 	cpumask_t cpumask---32ä½æ©ç (è¡¨ç¤ºå¯ä»¥æ¥æ”¶è¿™ä¸ªIRQçš„CPU)
+ * /proc/irq/n/smp_affinity(næ˜¯ä¸­æ–­å‘é‡)---æ”¹å˜æŒ‡å®šä¸­æ–­IRQçš„äº²å’ŒåŠ›
+ * */
 static void set_ioapic_affinity_irq(unsigned int irq, cpumask_t cpumask)
 {
 	unsigned long flags;
@@ -364,11 +363,9 @@ static inline void rotate_irqs_among_cpus(unsigned long useful_load_threshold)
 }
 
 /*
-*	¸Ãº¯Êı¸ú×ÙÔÚ×î½üÊ±¼ä¼ä¸ôÄÚÃ¿¸öCPU½ÓÊÕµÄÖĞ¶Ï´ÎÊı.
-*	Èç¹û¸Ãº¯Êı·¢ÏÖ¸ººÉ×îÖØµÄCPUºÍ¸ººÉ×îÇáµÄCPUÖ®¼äIRQ¸ºÔØ²»Æ½ºâµÄÎÊÌâÌ«ÑÏÖØ.
-*	ËüÒªÃ´°ÑIRQ´ÓÒ»¸öCPU×ªÒÆµ½ÁíÍâÒ»¸öCPU,
-*	ÒªÃ´ÈÃËùÓĞµÄIRQÔÚËùÓĞCPUÖ®¼ä"ÂÖ×ª"
-*/
+ * è¯¥å‡½æ•°è·Ÿè¸ªåœ¨æœ€è¿‘æ—¶é—´é—´éš”å†…æ¯ä¸ªCPUæ¥æ”¶çš„ä¸­æ–­æ¬¡æ•°.
+ * å¦‚æœè¯¥å‡½æ•°å‘ç°è´Ÿè·æœ€é‡çš„CPUå’Œè´Ÿè·æœ€è½»çš„CPUä¹‹é—´IRQè´Ÿè½½ä¸å¹³è¡¡çš„é—®é¢˜å¤ªä¸¥é‡.å®ƒè¦ä¹ˆæŠŠIRQä»ä¸€ä¸ªCPUè½¬ç§»åˆ°å¦å¤–ä¸€ä¸ªCPU,è¦ä¹ˆè®©æ‰€æœ‰çš„IRQåœ¨æ‰€æœ‰CPUä¹‹é—´"è½®è½¬"
+ * */
 static void do_irq_balance(void)
 {
 	int i, j;
@@ -576,7 +573,7 @@ static int balanced_irq(void *unused)
 	unsigned long prev_balance_time = jiffies;
 	long time_remaining = balanced_irq_interval;
 
-	/*kirqd ÄÚºËÏß³Ì*/
+	/*kirqd å†…æ ¸çº¿ç¨‹*/
 	daemonize("kirqd");
 	
 	/* push everything to CPU 0 to give us a starting point.  */
@@ -590,7 +587,7 @@ static int balanced_irq(void *unused)
 		try_to_freeze(PF_FREEZE);
 		if (time_after(jiffies,
 				prev_balance_time+balanced_irq_interval)) {
-			/*¸Ãº¯Êı¸ú×ÙÔÚ×î½üÊ±¼ä¼ä¸ôÄÚÃ¿¸öCPU½ÓÊÕµÄÖĞ¶Ï´ÎÊı.*/
+			/*è¯¥å‡½æ•°è·Ÿè¸ªåœ¨æœ€è¿‘æ—¶é—´é—´éš”å†…æ¯ä¸ªCPUæ¥æ”¶çš„ä¸­æ–­æ¬¡æ•°.*/
 			do_irq_balance();
 			prev_balance_time = jiffies;
 			time_remaining = balanced_irq_interval;
@@ -2283,11 +2280,7 @@ void __init setup_IO_APIC(void)
 	if (!acpi_ioapic)
 		setup_ioapic_ids_from_mpc();
 	sync_Arb_IDs();
-	/*
-	*	ÔÚÏµÍ³Æô¶¯¹ı³ÌÖĞ,³õÊ¼»¯I/O APICĞ¾Æ¬
-	*	Ğ¾Æ¬µÄÖĞ¶ÏÖØ¶¨Ïò±íµÄ24Ïî±»Ìî³ä,
-	*	ÒÔ±ã¸ù¾İ"×îµÍÓÅÏÈ¼¶" Ä£Ê½°ÑÀ´×ÔI/O Ó²¼şÉè±¸µÄËùÓĞĞÅºÅ¶¼´«µİ¸øÏµÍ³ÖĞµÄÃ¿¸öCPU
-	*/
+	/*åœ¨ç³»ç»Ÿå¯åŠ¨è¿‡ç¨‹ä¸­,åˆå§‹åŒ–I/O APICèŠ¯ç‰‡,èŠ¯ç‰‡çš„ä¸­æ–­é‡å®šå‘è¡¨çš„24é¡¹è¢«å¡«å……,ä»¥ä¾¿æ ¹æ®"æœ€ä½ä¼˜å…ˆçº§" æ¨¡å¼æŠŠæ¥è‡ªI/O ç¡¬ä»¶è®¾å¤‡çš„æ‰€æœ‰ä¿¡å·éƒ½ä¼ é€’ç»™ç³»ç»Ÿä¸­çš„æ¯ä¸ªCPU*/
 	setup_IO_APIC_irqs();
 	init_IO_APIC_traps();
 	check_timer();

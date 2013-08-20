@@ -91,6 +91,12 @@ void ext2_discard_prealloc (struct inode * inode)
 #endif
 }
 
+/*
+ * 在Ext2分区真正搜索一个空闲块
+ * 参数:struct inode * inode---指向索引节点对象的指针
+ *  	unsigned long goal---目标，是一个逻辑块号，表示新块的首选位置
+ *  	int *err---存放错误码的变量地址
+ * */
 static int ext2_alloc_block (struct inode * inode, unsigned long goal, int *err)
 {
 #ifdef EXT2FS_DEBUG
@@ -102,6 +108,7 @@ static int ext2_alloc_block (struct inode * inode, unsigned long goal, int *err)
 #ifdef EXT2_PREALLOCATE
 	struct ext2_inode_info *ei = EXT2_I(inode);
 	write_lock(&ei->i_meta_lock);
+	/*检查目标是否指向文件的预分配块中的一块，若是，就分配相应的块并返回逻辑块号*/
 	if (ei->i_prealloc_count &&
 	    (goal == ei->i_prealloc_block || goal + 1 == ei->i_prealloc_block))
 	{
@@ -110,6 +117,7 @@ static int ext2_alloc_block (struct inode * inode, unsigned long goal, int *err)
 		write_unlock(&ei->i_meta_lock);
 		ext2_debug ("preallocation hit (%lu/%lu).\n",
 			    ++alloc_hits, ++alloc_attempts);
+	/*丢弃所有剩余的预分配块并调用ext2_new_block()*/
 	} else {
 		write_unlock(&ei->i_meta_lock);
 		ext2_discard_prealloc (inode);
@@ -524,6 +532,10 @@ changed:
  * reachable from inode.
  */
 
+/*
+ * 分配一个数据块来保存Ext2普通文件的数据。若块不存在，该函数就自动为文件分配块
+ * 每当内核在Ext2普通文件上执行读或写操作时就调用该函数，显然，该函数只在页高速缓存内没有相应块时才被调用
+ * */
 int ext2_get_block(struct inode *inode, sector_t iblock, struct buffer_head *bh_result, int create)
 {
 	int err = -EIO;
@@ -536,7 +548,7 @@ int ext2_get_block(struct inode *inode, sector_t iblock, struct buffer_head *bh_
 	int depth = ext2_block_to_path(inode, iblock, offsets, &boundary);
 
 	if (depth == 0)
-		goto out;
+		got out;
 
 reread:
 	partial = ext2_get_branch(inode, depth, offsets, chain, &err);
@@ -865,6 +877,10 @@ static void ext2_free_branches(struct inode *inode, __le32 *p, __le32 *q, int de
 		ext2_free_data(inode, p, q);
 }
 
+/*
+ * 当进程删除一个文件或者把它的长度截为0时，其所有数据块必须回收
+ * 该函数扫描磁盘索引节点的i_block数组，以确定所有数据块的位置和间接寻址用的块的位置，然后反复调用ext2_free_blocks()释放这些块
+ * */
 void ext2_truncate (struct inode * inode)
 {
 	__le32 *i_data = EXT2_I(inode)->i_data;

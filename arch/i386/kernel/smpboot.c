@@ -381,11 +381,9 @@ void __init smp_callin(void)
 	Dprintk("CALLIN, before setup_local_APIC().\n");
 	smp_callin_clear_local_apic();
 	/*
-	*	��������APIC�ĳ�ʼ����
-	*	�ر�ģ�ÿ��оƬ���������ȼ��Ĵ���(TPR)����ʼ��Ϊһ���̶���ֵ,
-	*	�����ζ��CPUԸ�⴦���κ����͵�IRQ�ź�,�����������ȼ�.
-	*	Linux����֮��Ͳ��޸����ֵ
-	*/
+	 * 处理本地APIC的初始化。
+	 * 特别的，每个芯片的任务优先级寄存器(TPR)都初始化为一个固定的值,这就意味着CPU愿意处理任何类型的IRQ信号,而不管其优先级.Linux启动之后就不修改这个值
+	 * */
 	setup_local_APIC();
 	map_cpu_to_logical_apicid();
 

@@ -83,6 +83,7 @@
 	ipc_checkid(&sem_ids,&sma->sem_perm,semid)
 #define sem_buildid(id, seq) \
 	ipc_buildid(&sem_ids, id, seq)
+/*存放IPC信号量资源类型的ipc_ids数据结构*/
 static struct ipc_ids sem_ids;
 
 static int newary (key_t, int, int);

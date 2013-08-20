@@ -244,7 +244,7 @@ void __init kmap_init(void)
 	unsigned long kmap_vstart;
 
 	/* cache the first kmap pte */
-	/*³õÊ¼»¯kmap_pte*/
+	/*åˆå§‹åŒ–kmap_pte*/
 	kmap_vstart = __fix_to_virt(FIX_KMAP_BEGIN);
 	kmap_pte = kmap_get_fixmap_pte(kmap_vstart);
 

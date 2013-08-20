@@ -30,6 +30,10 @@ static void wake_up_partner(struct inode* inode)
 	wake_up_interruptible(PIPE_WAIT(*inode));
 }
 
+/*
+ * FIFO的open方法
+ * 初始化专用于FIFO的数据结构
+ * */
 static int fifo_open(struct inode *inode, struct file *filp)
 {
 	int ret;
@@ -38,6 +42,7 @@ static int fifo_open(struct inode *inode, struct file *filp)
 	if (down_interruptible(PIPE_SEM(*inode)))
 		goto err_nolock_nocleanup;
 
+	/*inode->i_pipe == NULL--->分配并初始化一个新的pipe_inode_info结构*/
 	if (!inode->i_pipe) {
 		ret = -ENOMEM;
 		if(!pipe_new(inode))
@@ -49,6 +54,7 @@ static int fifo_open(struct inode *inode, struct file *filp)
 	filp->f_mode &= (FMODE_READ | FMODE_WRITE);
 
 	switch (filp->f_mode) {
+	/*只读*/
 	case 1:
 	/*
 	 *  O_RDONLY

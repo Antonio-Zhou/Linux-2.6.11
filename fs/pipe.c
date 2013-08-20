@@ -39,9 +39,11 @@ void pipe_wait(struct inode * inode)
 {
 	DEFINE_WAIT(wait);
 
+	/*把current加到管道的等待队列*/
 	prepare_to_wait(PIPE_WAIT(*inode), &wait, TASK_INTERRUPTIBLE);
 	up(PIPE_SEM(*inode));
 	schedule();
+	/*一旦current被唤醒，就调用finish_wait()把它从等待队列中删除*/
 	finish_wait(PIPE_WAIT(*inode), &wait);
 	down(PIPE_SEM(*inode));
 }
@@ -114,6 +116,12 @@ static struct pipe_buf_operations anon_pipe_buf_ops = {
 	.release = anon_pipe_buf_release,
 };
 
+/*
+ *  以两种方式阻塞当前进程
+ *  	1.当系统调用开始时管道缓冲区为空
+ *  	2.管道缓冲区没有包含所请求的字节，写进程在等待缓冲区的空间时曾被置为睡眠
+ * 只有在管道为空且当前没有进程正在使用与管道相关的文件对象时，才返回0
+ * */
 static ssize_t
 pipe_readv(struct file *filp, const struct iovec *_iov,
 	   unsigned long nr_segs, loff_t *ppos)
@@ -132,11 +140,14 @@ pipe_readv(struct file *filp, const struct iovec *_iov,
 
 	do_wakeup = 0;
 	ret = 0;
+	/*获取索引节点的i_sem信号量  include/linux/pipe_fs_i.h*/
 	down(PIPE_SEM(*inode));
 	info = inode->i_pipe;
 	for (;;) {
 		int bufs = info->nrbufs;
+		/*确定管道大小是否为0*/
 		if (bufs) {
+			/*得到当前管道缓冲区索引*/
 			int curbuf = info->curbuf;
 			struct pipe_buffer *buf = info->bufs + curbuf;
 			struct pipe_buf_operations *ops = buf->ops;
@@ -147,8 +158,11 @@ pipe_readv(struct file *filp, const struct iovec *_iov,
 			if (chars > total_len)
 				chars = total_len;
 
+			/*执行map方法*/
 			addr = ops->map(filp, info, buf);
+			/*从管道缓冲区拷贝请求的字节数到用户地址空间*/
 			error = pipe_iov_copy_to_user(iov, addr + buf->offset, chars);
+			/*执行umap方法*/
 			ops->unmap(info, buf);
 			if (unlikely(error)) {
 				if (!ret) ret = -EFAULT;
@@ -157,8 +171,10 @@ pipe_readv(struct file *filp, const struct iovec *_iov,
 			ret += chars;
 			buf->offset += chars;
 			buf->len -= chars;
+			/*管道缓冲区为空*/
 			if (!buf->len) {
 				buf->ops = NULL;
+				/*释放对应的页框*/
 				ops->release(info, buf);
 				curbuf = (curbuf + 1) & (PIPE_BUFFERS-1);
 				info->curbuf = curbuf;
@@ -169,10 +185,13 @@ pipe_readv(struct file *filp, const struct iovec *_iov,
 			if (!total_len)
 				break;	/* common path: read succeeded */
 		}
+		/*还没有把所有请求拷贝到用户态*/
 		if (bufs)	/* More to do? */
 			continue;
+		/*管道缓冲区已没有剩余字节，*/
 		if (!PIPE_WRITERS(*inode))
 			break;
+		/*是否至少有一个写进程正在睡眠  PIPE_WAITING_WRITERS(*inode) > 0  include/linux/pipe_fs_i.h*/
 		if (!PIPE_WAITING_WRITERS(*inode)) {
 			/* syscall merging: Usually we must not sleep
 			 * if O_NONBLOCK is set, or if we got some data.
@@ -194,19 +213,25 @@ pipe_readv(struct file *filp, const struct iovec *_iov,
 			wake_up_interruptible_sync(PIPE_WAIT(*inode));
  			kill_fasync(PIPE_FASYNC_WRITERS(*inode), SIGIO, POLL_OUT);
 		}
+		/*当前进程必须被阻塞*/
 		pipe_wait(inode);
 	}
 	up(PIPE_SEM(*inode));
 	/* Signal writers asynchronously that there is more room.  */
 	if (do_wakeup) {
+		/*唤醒在管道等待队列中所有睡眠的写者进程*/
 		wake_up_interruptible(PIPE_WAIT(*inode));
 		kill_fasync(PIPE_FASYNC_WRITERS(*inode), SIGIO, POLL_OUT);
 	}
 	if (ret > 0)
 		file_accessed(filp);
+	/*返回拷贝到用户地址空间的字节数*/
 	return ret;
 }
 
+/*
+ * 管道的读操作
+ * */
 static ssize_t
 pipe_read(struct file *filp, char __user *buf, size_t count, loff_t *ppos)
 {
@@ -235,6 +260,11 @@ pipe_writev(struct file *filp, const struct iovec *_iov,
 	down(PIPE_SEM(*inode));
 	info = inode->i_pipe;
 
+	/* 
+	 * 如果管道没有读进程，那么任何对管道执行的写操作都会失败，
+	 * 内核会向写进程发送一个SIGPIPE信号，并停止write()系统调用，返回-EPIPE错误码
+	 * 就是我们熟悉的"Broken pipe(损坏的管道)"消息
+	 * */
 	if (!PIPE_READERS(*inode)) {
 		send_sig(SIGPIPE, current, 0);
 		ret = -EPIPE;
@@ -243,10 +273,12 @@ pipe_writev(struct file *filp, const struct iovec *_iov,
 
 	/* We try to merge small writes */
 	if (info->nrbufs && total_len < PAGE_SIZE) {
+		/*等到最后写入的管道缓冲区索引*/
 		int lastbuf = (info->curbuf + info->nrbufs - 1) & (PIPE_BUFFERS-1);
 		struct pipe_buffer *buf = info->bufs + lastbuf;
 		struct pipe_buf_operations *ops = buf->ops;
 		int offset = buf->offset + buf->len;
+		/*该管道缓冲区由足够空间存放待写字节，就拷入这些数据*/
 		if (ops->can_merge && offset + total_len <= PAGE_SIZE) {
 			void *addr = ops->map(filp, info, buf);
 			int error = pipe_iov_copy_from_user(offset + addr, iov, total_len);
@@ -270,13 +302,16 @@ pipe_writev(struct file *filp, const struct iovec *_iov,
 			break;
 		}
 		bufs = info->nrbufs;
+		/*没有空闲管道缓冲区来存放待写字节  include/linux/pipe_fs_i.h*/
 		if (bufs < PIPE_BUFFERS) {
 			ssize_t chars;
+			/*现在至少有一个空缓冲区，得到第一个空管道缓冲区索引*/
 			int newbuf = (info->curbuf + bufs) & (PIPE_BUFFERS-1);
 			struct pipe_buffer *buf = info->bufs + newbuf;
 			struct page *page = info->tmp_page;
 			int error;
 
+			/*info->tmp_page == NULL--->从伙伴系统中分配一个新页框*/
 			if (!page) {
 				page = alloc_page(GFP_HIGHUSER);
 				if (unlikely(!page)) {
@@ -295,6 +330,7 @@ pipe_writev(struct file *filp, const struct iovec *_iov,
 			if (chars > total_len)
 				chars = total_len;
 
+			/*从用户态地址空间拷贝多达4096字节到页框*/
 			error = pipe_iov_copy_from_user(kmap(page), iov, chars);
 			kunmap(page);
 			if (unlikely(error)) {
@@ -304,10 +340,14 @@ pipe_writev(struct file *filp, const struct iovec *_iov,
 			ret += chars;
 
 			/* Insert it into the buffer array */
+			/*页框描述符的地址*/
 			buf->page = page;
+			/*anon_pipe_buf_ops表的地址*/
 			buf->ops = &anon_pipe_buf_ops;
 			buf->offset = 0;
+			/*设为写入的字节数*/
 			buf->len = chars;
+			/*非空管道缓冲区计数器*/
 			info->nrbufs = ++bufs;
 			info->tmp_page = NULL;
 
@@ -317,6 +357,7 @@ pipe_writev(struct file *filp, const struct iovec *_iov,
 		}
 		if (bufs < PIPE_BUFFERS)
 			continue;
+		/*写操作是非阻塞的*/
 		if (filp->f_flags & O_NONBLOCK) {
 			if (!ret) ret = -EAGAIN;
 			break;
@@ -330,6 +371,7 @@ pipe_writev(struct file *filp, const struct iovec *_iov,
 			kill_fasync(PIPE_FASYNC_READERS(*inode), SIGIO, POLL_IN);
 			do_wakeup = 0;
 		}
+		/*写操作是阻塞的*/
 		PIPE_WAITING_WRITERS(*inode)++;
 		pipe_wait(inode);
 		PIPE_WAITING_WRITERS(*inode)--;
@@ -678,6 +720,9 @@ static struct dentry_operations pipefs_dentry_operations = {
 	.d_delete	= pipefs_delete_dentry,
 };
 
+/*
+ * 为pipefs文件系统中的管道分配一个索引节点对象，并对其进行初始化
+ * */
 static struct inode * get_pipe_inode(void)
 {
 	struct inode *inode = new_inode(pipe_mnt->mnt_sb);
@@ -729,6 +774,7 @@ int do_pipe(int *fd)
 	if (!f2)
 		goto close_f1;
 
+	/*为pipefs文件系统中的管道分配一个索引节点对象，并对其进行初始化*/
 	inode = get_pipe_inode();
 	if (!inode)
 		goto close_f12;
@@ -758,6 +804,7 @@ int do_pipe(int *fd)
 	f1->f_mapping = f2->f_mapping = inode->i_mapping;
 
 	/* read file */
+	/*为管道的读通道分配读描述符*/
 	f1->f_pos = f2->f_pos = 0;
 	f1->f_flags = O_RDONLY;
 	f1->f_op = &read_pipe_fops;
@@ -765,6 +812,7 @@ int do_pipe(int *fd)
 	f1->f_version = 0;
 
 	/* write file */
+	/*为管道的读通道分配写描述符*/
 	f2->f_flags = O_WRONLY;
 	f2->f_op = &write_pipe_fops;
 	f2->f_mode = FMODE_WRITE;
@@ -810,6 +858,10 @@ static struct file_system_type pipe_fs_type = {
 	.kill_sb	= kill_anon_super,
 };
 
+/*
+ * 一般在内核初始化期间执行
+ * 注册pipefs文件系统并安装它
+ * */
 static int __init init_pipe_fs(void)
 {
 	int err = register_filesystem(&pipe_fs_type);

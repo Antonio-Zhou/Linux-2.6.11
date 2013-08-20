@@ -102,9 +102,7 @@ static int __devinit cpu_to_cpu_group(int cpu)
 }
 #endif
 
-/*
-*	ÎïÀíCPUµÄsched_domainÃèÊö·û¶¼·ÅÔÚÃ¿CPU±äÁ¿phys_domainÖĞ
-*/
+/*ç‰©ç†CPUçš„sched_domainæè¿°ç¬¦éƒ½æ”¾åœ¨æ¯CPUå˜é‡phys_domainä¸­*/
 static DEFINE_PER_CPU(struct sched_domain, phys_domains);
 static struct sched_group sched_group_phys[NR_CPUS];
 static int __devinit cpu_to_phys_group(int cpu)

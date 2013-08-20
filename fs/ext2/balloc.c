@@ -174,6 +174,14 @@ static void group_release_blocks(struct super_block *sb, int group_no,
 }
 
 /* Free given blocks, update quota and i_blocks field */
+
+/*
+ * 释放一组含有一个或多个相邻块的数据块
+ * 当丢弃文件的与分配块时也主要调用它
+ * 参数:struct inode * inode---文件索引节点对象的地址
+ * 	unsigned long block---要释放的第一个块的逻辑块号
+ * 	unsigned long count---要释放的相邻块数
+ * */
 void ext2_free_blocks (struct inode * inode, unsigned long block,
 		       unsigned long count)
 {

@@ -55,9 +55,9 @@ fastcall void __up(struct semaphore *sem)
 }
 
 /*
-*	°Ñµ±Ç°½ø³ÌµÄ×´Ì¬´ÓTASK_RUNNING¸Ä±äÎªTASK_UNINTERRUPTBLE,²¢°Ñ½ø³Ì·ÅÔÚÐÅºÅÁ¿µÄµÈ´ý¶ÓÁÐÖÐ
-*	Èç¹ûÃ»ÓÐ½ø³ÌÔÚÐÅºÅÁ¿µÈ´ý¶ÓÁÐÉÏË¯Ãß,ÔòÐÅºÅÁ¿µÄsleepers==0,·ñÔò==1
-*/
+ * æŠŠå½“å‰è¿›ç¨‹çš„çŠ¶æ€ä»ŽTASK_RUNNINGæ”¹å˜ä¸ºTASK_UNINTERRUPTBLE,å¹¶æŠŠè¿›ç¨‹æ”¾åœ¨ä¿¡å·é‡çš„ç­‰å¾…é˜Ÿåˆ—ä¸­
+ * å¦‚æžœæ²¡æœ‰è¿›ç¨‹åœ¨ä¿¡å·é‡ç­‰å¾…é˜Ÿåˆ—ä¸Šç¡çœ ,åˆ™ä¿¡å·é‡çš„sleepers == 0,å¦åˆ™ == 1
+ * */
 fastcall void __sched __down(struct semaphore * sem)
 {
 	struct task_struct *tsk = current;
@@ -65,7 +65,7 @@ fastcall void __sched __down(struct semaphore * sem)
 	unsigned long flags;
 
 	tsk->state = TASK_UNINTERRUPTIBLE;
-	/*»ñµÃ×ÔÐýËø,±£»¤ÐÅºÅÁ¿µÈ´ý¶ÓÁÐ*/
+	/*èŽ·å¾—è‡ªæ—‹é”,ä¿æŠ¤ä¿¡å·é‡ç­‰å¾…é˜Ÿåˆ—*/
 	spin_lock_irqsave(&sem->wait.lock, flags);
 	add_wait_queue_exclusive_locked(&sem->wait, &wait);
 

@@ -243,6 +243,10 @@ void __iget(struct inode * inode)
 void clear_inode(struct inode *inode)
 {
 	might_sleep();
+	/*
+	 * 删除与索引节点相关联的"间接"脏缓冲区
+	 * 它们存放在首部在address_space对象inode->i_data
+	 * */
 	invalidate_inode_buffers(inode);
        
 	if (inode->i_data.nrpages)
@@ -251,14 +255,23 @@ void clear_inode(struct inode *inode)
 		BUG();
 	if (inode->i_state & I_CLEAR)
 		BUG();
+	/*
+	 * 若索引节点的I_LOCK置位，说明索引节点中的某些缓冲区正在I/O数据传输
+	 * 挂起当前进程，直到数据传输结束
+	 * include/linux/writeback.h
+	 * */
 	wait_on_inode(inode);
 	DQUOT_DROP(inode);
+	/*调用clear_inode方法，但Ext2没有定义*/
 	if (inode->i_sb && inode->i_sb->s_op->clear_inode)
 		inode->i_sb->s_op->clear_inode(inode);
+	/*索引指向设备文件，从设备的索引节点链表中删除索引节点对象*/
 	if (inode->i_bdev)
+		/*fs/block_dev.c*/
 		bd_forget(inode);
 	if (inode->i_cdev)
 		cd_forget(inode);
+	/*索引节点对象的内容不再有意义*/
 	inode->i_state = I_CLEAR;
 }
 

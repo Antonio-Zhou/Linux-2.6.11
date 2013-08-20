@@ -104,6 +104,16 @@ static void ext2_release_inode(struct super_block *sb, int group, int dir)
  * though), and then we'd have two inodes sharing the
  * same inode number and space on the harddisk.
  */
+
+/*
+ * 删除一个磁盘索引节点
+ * 内核在进行一系列的清除操作(包括清除内部数据结构和文件中的数据)之后调用该函数
+ * 具体说来:
+ * 	1.索引节点对象已经从散列表中删除
+ * 	2.指向这个索引节点的最后一个硬链接已经从适合的目录中删除
+ * 	3.文件长度截为0，以回收它的所有数据块
+ * 参数:struct inode * inode---磁盘索引对象地址
+ * */
 void ext2_free_inode (struct inode * inode)
 {
 	struct super_block * sb = inode->i_sb;
@@ -132,6 +142,8 @@ void ext2_free_inode (struct inode * inode)
 	is_directory = S_ISDIR(inode->i_mode);
 
 	/* Do this BEFORE marking the inode not in use or returning an error */
+
+	/*fs/inode.c*/
 	clear_inode (inode);
 
 	if (ino < EXT2_FIRST_INO(sb) ||
@@ -140,9 +152,11 @@ void ext2_free_inode (struct inode * inode)
 			    "reserved or nonexistent inode %lu", ino);
 		goto error_return;
 	}
+	/*从每个块组的索引节点号和索引节点数计算包含这个磁盘索引节点的块组的索引*/
 	block_group = (ino - 1) / EXT2_INODES_PER_GROUP(sb);
 	bit = (ino - 1) % EXT2_INODES_PER_GROUP(sb);
 	brelse(bitmap_bh);
+	/*得到索引节点位图*/
 	bitmap_bh = read_inode_bitmap(sb, block_group);
 	if (!bitmap_bh)
 		goto error_return;
@@ -154,6 +168,7 @@ void ext2_free_inode (struct inode * inode)
 			      "bit already cleared for inode %lu", ino);
 	else
 		ext2_release_inode(sb, block_group, is_directory);
+	/*清除索引节点位图中这个磁盘索引节点对应的位，并把包含这个位图的缓冲区标记为脏，*/
 	mark_buffer_dirty(bitmap_bh);
 	if (sb->s_flags & MS_SYNCHRONOUS)
 		sync_dirty_buffer(bitmap_bh);
@@ -388,6 +403,9 @@ found:
 	return group;
 }
 
+/*
+ * 新索引节点不是目录,在有空闲索引节点的块组中给它分配一个
+ * */
 static int find_group_other(struct super_block *sb, struct inode *parent)
 {
 	int parent_group = EXT2_I(parent)->i_block_group;
@@ -487,6 +505,7 @@ struct inode *ext2_new_inode(struct inode *dir, int mode)
 			/*为目录找到一个合适的块组*/
 			group = find_group_orlov(sb, dir);
 	} else 
+		/*新索引节点不是目录,在有空闲索引节点的块组中给它分配一个*/
 		group = find_group_other(sb, dir);
 
 	if (group == -1) {
@@ -497,6 +516,7 @@ struct inode *ext2_new_inode(struct inode *dir, int mode)
 	for (i = 0; i < sbi->s_groups_count; i++) {
 		gdp = ext2_get_group_desc(sb, group, &bh2);
 		brelse(bitmap_bh);
+		/*得到所选块组的索引节点位图，并从中寻找第一个空位，这样就得到第一个空闲磁盘索引节点号  fs/ext2/ialloc.c*/
 		bitmap_bh = read_inode_bitmap(sb, group);
 		if (!bitmap_bh) {
 			err = -EIO;
@@ -541,8 +561,10 @@ repeat_in_this_group:
 	err = -ENOSPC;
 	goto fail;
 got:
+	/*分配磁盘索引节点:把索引节点位图中的相应位置位，并把含有这个位图的缓冲区标记为脏*/
 	mark_buffer_dirty(bitmap_bh);
 	if (sb->s_flags & MS_SYNCHRONOUS)
+		/*开始I/O写操作并等待，知道写操作终止*/
 		sync_dirty_buffer(bitmap_bh);
 	brelse(bitmap_bh);
 
@@ -563,6 +585,7 @@ got:
 	spin_lock(sb_bgl_lock(sbi, group));
 	gdp->bg_free_inodes_count =
                 cpu_to_le16(le16_to_cpu(gdp->bg_free_inodes_count) - 1);
+	/*新索引节点是一个目录*/
 	if (S_ISDIR(mode)) {
 		if (sbi->s_debts[group] < 255)
 			sbi->s_debts[group]++;
@@ -574,8 +597,10 @@ got:
 	}
 	spin_unlock(sb_bgl_lock(sbi, group));
 
+	/*将s_dirt置1，并把包含它的缓冲区标记为脏*/
 	sb->s_dirt = 1;
 	mark_buffer_dirty(bh2);
+	/*初始化索引节点对象的字段*/
 	inode->i_uid = current->fsuid;
 	if (test_opt (sb, GRPID))
 		inode->i_gid = dir->i_gid;
@@ -615,6 +640,7 @@ got:
 	spin_lock(&sbi->s_next_gen_lock);
 	inode->i_generation = sbi->s_next_generation++;
 	spin_unlock(&sbi->s_next_gen_lock);
+	/*将新索引节点对象插入散列表inode_hashtable  include/linux/fs.h--->fs/inode.c*/
 	insert_inode_hash(inode);
 
 	if (DQUOT_ALLOC_INODE(inode)) {
@@ -622,14 +648,21 @@ got:
 		err = -ENOSPC;
 		goto fail2;
 	}
+	/*初始化索引节点对象的访问控制列表*/
 	err = ext2_init_acl(inode, dir);
 	if (err) {
 		DQUOT_FREE_INODE(inode);
 		goto fail2;
 	}
+	/*把新索引节点对象移进超级块索引节点链表*/
 	mark_inode_dirty(inode);
 	ext2_debug("allocating inode %lu\n", inode->i_ino);
+	/*
+	 * 从磁盘读入包含该索引节点的块，将它存入页高速缓存
+	 * 进行这种预读是因为最近创建的索引节点可能会被很快写入
+	 * */
 	ext2_preread_inode(inode);
+	/*返回写索引节点对象地址*/
 	return inode;
 
 fail2:
